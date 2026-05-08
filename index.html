@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8fafc">
+    <meta name="description" content="PMS production management system for tracking PI orders, yarn planning, greige production and dyeing.">
+    <title>PMS Production Management System</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">P</span>
+          <span>
+            <strong>PMS</strong>
+            <small>Production Management</small>
+          </span>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-button is-active" type="button" data-view-button="dashboard">Dashboard</button>
+          <button class="nav-button" type="button" data-view-button="orders">Orders</button>
+          <button class="nav-button" type="button" data-view-button="create">New PI</button>
+          <button class="nav-button" type="button" data-view-button="masters">Masters</button>
+        </nav>
+
+        <div class="sync-box">
+          <span class="sync-dot" id="syncDot" aria-hidden="true"></span>
+          <span id="syncText">Starting...</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Production control</p>
+            <h1 id="viewTitle">Dashboard</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" type="button" id="installButton" hidden title="Install app">Install</button>
+            <button class="primary-button" type="button" id="refreshButton">Refresh</button>
+          </div>
+        </header>
+
+        <section class="view is-active" id="dashboardView" aria-labelledby="viewTitle">
+          <div class="metric-grid" id="metricGrid"></div>
+          <div class="content-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Priority Work</h2>
+                <span class="muted" id="priorityCount">0 open</span>
+              </div>
+              <div class="queue-list" id="priorityList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Status Overview</h2>
+                <span class="muted">Item stages</span>
+              </div>
+              <div class="status-stack" id="statusStack"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="ordersView" aria-labelledby="viewTitle">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Search</span>
+              <input id="orderSearch" type="search" placeholder="PI, customer, fabric, colour">
+            </label>
+            <label class="select-field">
+              <span>Status</span>
+              <select id="statusFilter">
+                <option value="">All</option>
+                <option value="New">New</option>
+                <option value="Running">Running</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="orders-layout">
+            <section class="panel table-panel">
+              <div class="panel-heading">
+                <h2>PI List</h2>
+                <span class="muted" id="orderCount">0 PIs</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>PI</th>
+                      <th>Customer</th>
+                      <th>Items</th>
+                      <th>Qty</th>
+                      <th>Delivery</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ordersTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel detail-panel" id="piDetail">
+              <div class="empty-state">
+                <h2>Select a PI</h2>
+                <p>Choose any PI to see its items, yarns, production lots and dyeing progress.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="createView" aria-labelledby="viewTitle">
+          <form class="panel form-panel" id="createPiForm">
+            <div class="panel-heading">
+              <h2>Create PI</h2>
+              <span class="muted">Multiple items supported</span>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                <span>PI No</span>
+                <input name="pi_no" required placeholder="PI-1001">
+              </label>
+              <label>
+                <span>Customer</span>
+                <input name="customer_name" required list="customersList" placeholder="Customer name">
+              </label>
+              <label>
+                <span>Sales Manager</span>
+                <input name="sales_manager" placeholder="Name">
+              </label>
+              <label>
+                <span>PI Date</span>
+                <input name="pi_date" type="date">
+              </label>
+              <label>
+                <span>Delivery Date</span>
+                <input name="delivery_date" type="date">
+              </label>
+              <label>
+                <span>Priority</span>
+                <select name="priority">
+                  <option>Normal</option>
+                  <option>Urgent</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="full-field">
+              <span>Remarks</span>
+              <textarea name="remarks" rows="2" placeholder="Any PI-level notes"></textarea>
+            </label>
+
+            <div class="section-heading">
+              <h3>PI Items</h3>
+              <button class="secondary-button" type="button" id="addItemButton">Add Item</button>
+            </div>
+
+            <div class="item-editor-list" id="itemEditorList"></div>
+
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Save PI</button>
+              <button class="secondary-button" type="reset">Clear</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="view" id="mastersView" aria-labelledby="viewTitle">
+          <div class="content-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Add Master</h2>
+                <span class="muted">Dropdown data</span>
+              </div>
+              <form id="masterForm" class="stack-form">
+                <label>
+                  <span>Master Type</span>
+                  <select name="sheetName" id="masterType">
+                    <option value="Masters_Customers">Customer</option>
+                    <option value="Masters_Fabrics">Fabric</option>
+                    <option value="Masters_Yarns">Yarn</option>
+                    <option value="Masters_JobWorkers">Job Worker</option>
+                    <option value="Masters_DyeingProcesses">Dyeing Process</option>
+                    <option value="Masters_Addons">Addon</option>
+                  </select>
+                </label>
+                <div id="masterFields"></div>
+                <button class="primary-button" type="submit">Save Master</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Master Lists</h2>
+                <span class="muted">Live from Sheet</span>
+              </div>
+              <div class="master-list" id="masterList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <datalist id="customersList"></datalist>
+    <datalist id="fabricsList"></datalist>
+    <datalist id="yarnsList"></datalist>
+
+    <template id="itemEditorTemplate">
+      <div class="item-editor" data-item-editor>
+        <div class="item-editor-head">
+          <strong data-line-label>Item</strong>
+          <button class="text-button danger" type="button" data-remove-item>Remove</button>
+        </div>
+        <div class="form-grid compact">
+          <label>
+            <span>Fabric</span>
+            <input name="fabric_name" required list="fabricsList" placeholder="Fabric name">
+          </label>
+          <label>
+            <span>Colour</span>
+            <input name="colour" required placeholder="Black">
+          </label>
+          <label>
+            <span>Qty</span>
+            <input name="ordered_qty" required type="number" min="0" step="0.01" placeholder="0">
+          </label>
+          <label>
+            <span>Unit</span>
+            <select name="unit">
+              <option>Kg</option>
+              <option>Meter</option>
+              <option>Piece</option>
+            </select>
+          </label>
+          <label>
+            <span>GSM</span>
+            <input name="gsm" type="number" min="0" step="1" placeholder="220">
+          </label>
+          <label>
+            <span>Width/Dia</span>
+            <input name="width" placeholder="Open width or dia">
+          </label>
+        </div>
+        <label class="full-field">
+          <span>Item Remarks</span>
+          <input name="remarks" placeholder="Optional">
+        </label>
+      </div>
+    </template>
+
+    <script src="assets/app.js" defer></script>
+  </body>
+</html>

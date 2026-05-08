@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-labelledby="title">
+  <title>PMS app icon</title>
+  <rect width="192" height="192" rx="36" fill="#2563eb"/>
+  <path d="M48 52h57c25 0 41 15 41 38s-16 38-41 38H80v28H48V52Zm32 27v22h22c7 0 12-4 12-11s-5-11-12-11H80Z" fill="#fff"/>
+  <path d="M124 134h24v22h-24z" fill="#bfdbfe"/>
+</svg>

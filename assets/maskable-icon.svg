@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>PMS maskable app icon</title>
+  <rect width="512" height="512" fill="#2563eb"/>
+  <circle cx="256" cy="256" r="214" fill="#1d4ed8"/>
+  <path d="M132 136h150c67 0 110 40 110 101s-43 101-110 101h-66v74h-84V136Zm84 72v59h58c20 0 33-11 33-30s-13-29-33-29h-58Z" fill="#fff"/>
+  <path d="M331 353h63v59h-63z" fill="#bfdbfe"/>
+</svg>
