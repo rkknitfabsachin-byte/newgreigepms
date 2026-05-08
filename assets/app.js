@@ -321,7 +321,7 @@ function renderPriorityList(delayedItems) {
 function renderStatusStack() {
   const items = rows('PI_Items');
   const groups = groupCount(items, 'status');
-  const statuses = ['New', 'Planned', 'In Production', 'Greige Ready', 'In Dyeing', 'Part Received', 'Completed'];
+  const statuses = ['New', 'Planned', 'Greige Received', 'Greige Ready', 'In Dyeing', 'Part Received', 'Completed'];
   const max = Math.max.apply(null, statuses.map(function (status) {
     return groups[status] || 0;
   }).concat([1]));
@@ -476,7 +476,10 @@ function renderYarnForm(item) {
 }
 
 function renderGreigeForm(item) {
-  const lots = getGreigeLots(item.pi_item_id);
+  const groupItems = getFabricGroupItems(item);
+  const groupOrderedQty = sum(groupItems, 'ordered_qty');
+  const lots = getGreigeLotsForGroup(item);
+  const groupGreigeQty = sum(lots, 'weight_qty');
   const machines = rows('Masters_Machines');
   const workers = rows('Masters_JobWorkers');
   const machineOptions = machines.map(function (machine) {
@@ -486,7 +489,13 @@ function renderGreigeForm(item) {
     return '<option value="' + escapeAttr(worker.job_worker_name) + '">';
   }).join('');
 
-  return '<form id="greigeForm" class="stack-form">' +
+  return '<div class="pi-summary">' +
+    summaryTile('Fabric Group', item.fabric_name) +
+    summaryTile('Colours', groupItems.length) +
+    summaryTile('Greige / Ordered', formatNumber(groupGreigeQty) + ' / ' + formatNumber(groupOrderedQty)) +
+  '</div>' +
+  '<form id="greigeForm" class="stack-form">' +
+    '<h3>Receive greige for all ' + escapeHtml(item.fabric_name) + ' colours in this PI</h3>' +
     '<div class="form-grid">' +
       '<label><span>Lot No</span><input name="greige_lot_no" placeholder="Auto if blank"></label>' +
       '<label><span>Received Date</span><input name="received_date" type="date" value="' + todayIso() + '"></label>' +
@@ -503,19 +512,22 @@ function renderGreigeForm(item) {
   '</form>' +
   renderMiniList('Greige Lots', lots, function (lot) {
     const source = lot.source_type === 'Job worker' ? lot.job_worker_name : 'Machine ' + lot.machine_no;
+    const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
     return '<strong>' + escapeHtml(lot.greige_lot_no || '-') + ' - ' + escapeHtml(source || '-') + '</strong><span>' +
-      formatNumber(lot.rolls) + ' rolls / ' + formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') + '</span>';
+      formatNumber(lot.rolls) + ' rolls / ' + formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') +
+      ' - balance ' + formatNumber(balance) + '</span>';
   });
 }
 
 function renderDyeingForm(item) {
   const lots = getDyeingLots(item.pi_item_id);
-  const greigeLots = getGreigeLots(item.pi_item_id);
+  const greigeLots = getGreigeLotsForGroup(item);
   const processes = rows('Masters_DyeingProcesses').map(function (process) {
     return '<option value="' + escapeAttr(process.process_name) + '">' + escapeHtml(process.process_name) + '</option>';
   }).join('');
   const greigeOptions = greigeLots.map(function (lot) {
-    return '<option value="' + escapeAttr(lot.greige_lot_no) + '">' + escapeHtml(lot.greige_lot_no) + ' - ' + formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') + '</option>';
+    const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
+    return '<option value="' + escapeAttr(lot.greige_lot_no) + '">' + escapeHtml(lot.greige_lot_no) + ' - balance ' + formatNumber(balance) + ' ' + escapeHtml(lot.unit || 'Kg') + '</option>';
   }).join('');
   const addons = rows('Masters_Addons').map(function (addon) {
     return addon.addon_name;
@@ -792,9 +804,15 @@ function getYarns(piItemId) {
   });
 }
 
-function getGreigeLots(piItemId) {
+function getFabricGroupItems(item) {
+  return rows('PI_Items').filter(function (record) {
+    return isSameFabricGroup(record, item);
+  });
+}
+
+function getGreigeLotsForGroup(item) {
   return rows('Greige_Lots').filter(function (record) {
-    return record.pi_item_id === piItemId;
+    return isSameFabricGroup(record, item);
   });
 }
 
@@ -837,6 +855,34 @@ function groupCount(records, key) {
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeKey(value) {
+  return String(value === undefined || value === null ? '' : value).trim().toUpperCase();
+}
+
+function isSameFabricGroup(record, group) {
+  if (group.pi_id && record.pi_id && String(record.pi_id) !== String(group.pi_id)) {
+    return false;
+  }
+
+  if ((!group.pi_id || !record.pi_id) && normalizeKey(record.pi_no) !== normalizeKey(group.pi_no)) {
+    return false;
+  }
+
+  if (normalizeKey(record.fabric_name) !== normalizeKey(group.fabric_name)) {
+    return false;
+  }
+
+  if (group.gsm && record.gsm && normalizeKey(record.gsm) !== normalizeKey(group.gsm)) {
+    return false;
+  }
+
+  if (group.width && record.width && normalizeKey(record.width) !== normalizeKey(group.width)) {
+    return false;
+  }
+
+  return true;
 }
 
 function formatNumber(value) {

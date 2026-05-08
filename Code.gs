@@ -79,10 +79,11 @@ const PMS_SHEETS = [
       'greige_lot_id',
       'source_key',
       'greige_lot_no',
-      'pi_item_id',
+      'pi_id',
       'pi_no',
       'fabric_name',
-      'colour',
+      'gsm',
+      'width',
       'received_date',
       'source_type',
       'machine_no',
@@ -91,6 +92,10 @@ const PMS_SHEETS = [
       'rolls',
       'weight_qty',
       'unit',
+      'dyeing_sent_rolls',
+      'dyeing_sent_weight',
+      'balance_rolls',
+      'balance_weight',
       'status',
       'remarks',
       'created_at',
@@ -106,6 +111,7 @@ const PMS_SHEETS = [
       'greige_lot_no',
       'pi_item_id',
       'pi_no',
+      'fabric_name',
       'dyeing_party',
       'sent_date',
       'sent_rolls',
@@ -155,9 +161,9 @@ const PMS_SHEETS = [
       'source_key',
       'greige_lot_no',
       'pi_no',
-      'line_no',
       'fabric_name',
-      'colour',
+      'gsm',
+      'width',
       'received_date',
       'source_type',
       'machine_no',
@@ -766,11 +772,11 @@ function importGreigeLots_() {
       continue;
     }
 
-    const item = findPiItemForImport_(record);
-    if (!item) {
+    const group = findFabricGroupForGreigeImport_(record);
+    if (!group) {
       writeLotImportResult_(importSheet, headers, rowNumber, {
         status: 'Failed',
-        message: 'No matching PI item found.',
+        message: 'No matching PI fabric group found.',
       }, 'imported_greige_lot_id');
       counts.failedRows += 1;
       continue;
@@ -780,10 +786,11 @@ function importGreigeLots_() {
       greige_lot_id: makeId_('GREIGE'),
       source_key: sourceKey,
       greige_lot_no: lotNo,
-      pi_item_id: item.pi_item_id,
-      pi_no: item.pi_no,
-      fabric_name: item.fabric_name,
-      colour: item.colour,
+      pi_id: group.pi_id,
+      pi_no: group.pi_no,
+      fabric_name: group.fabric_name,
+      gsm: group.gsm || '',
+      width: group.width || '',
       received_date: record.received_date || today_(),
       source_type: record.source_type || 'In-house',
       machine_no: record.machine_no || '',
@@ -791,7 +798,11 @@ function importGreigeLots_() {
       job_worker_name: record.job_worker_name || '',
       rolls: toNumber_(record.rolls),
       weight_qty: toNumber_(record.weight_qty),
-      unit: record.unit || item.unit || 'Kg',
+      unit: record.unit || group.unit || 'Kg',
+      dyeing_sent_rolls: 0,
+      dyeing_sent_weight: 0,
+      balance_rolls: toNumber_(record.rolls),
+      balance_weight: toNumber_(record.weight_qty),
       status: 'Received',
       remarks: record.remarks || '',
       created_at: new Date().toISOString(),
@@ -800,7 +811,7 @@ function importGreigeLots_() {
     appendObject_(greigeSheet, greigeLot);
     existingKeys[normalizeKey_(sourceKey)] = true;
     existingLotNos[normalizeKey_(lotNo)] = true;
-    recalculateItem_(item.pi_item_id);
+    recalculateFabricGroup_(group.pi_id, group.fabric_name, group.gsm, group.width);
 
     writeLotImportResult_(importSheet, headers, rowNumber, {
       status: 'Imported',
@@ -891,6 +902,16 @@ function importDyeingLots_() {
       continue;
     }
 
+    const item = findDyeingItemForGreigeLot_(greigeLot, record);
+    if (!item) {
+      writeLotImportResult_(importSheet, headers, rowNumber, {
+        status: 'Failed',
+        message: 'No matching colour item found for this greige lot.',
+      }, 'imported_dyeing_lot_id');
+      counts.failedRows += 1;
+      continue;
+    }
+
     const sentWeight = toNumber_(record.sent_weight);
     const receivedWeight = toNumber_(record.received_weight);
     const dyeingLot = {
@@ -898,8 +919,9 @@ function importDyeingLots_() {
       source_key: sourceKey,
       greige_lot_id: greigeLot.greige_lot_id,
       greige_lot_no: greigeLot.greige_lot_no,
-      pi_item_id: greigeLot.pi_item_id,
+      pi_item_id: item.pi_item_id,
       pi_no: greigeLot.pi_no,
+      fabric_name: greigeLot.fabric_name,
       dyeing_party: record.dyeing_party || '',
       sent_date: record.sent_date || today_(),
       sent_rolls: toNumber_(record.sent_rolls),
@@ -918,7 +940,8 @@ function importDyeingLots_() {
 
     appendObject_(dyeingSheet, dyeingLot);
     existingKeys[normalizeKey_(sourceKey)] = true;
-    recalculateItem_(greigeLot.pi_item_id);
+    recalculateGreigeLot_(greigeLot.greige_lot_id);
+    recalculateItem_(item.pi_item_id);
 
     writeLotImportResult_(importSheet, headers, rowNumber, {
       status: 'Imported',
@@ -998,6 +1021,81 @@ function findPiItemForImport_(record) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+function findFabricGroupForGreigeImport_(record) {
+  const matches = getSheetObjects_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('PI_Items'))
+    .filter(function (item) {
+      if (normalizeKey_(item.pi_no) !== normalizeKey_(record.pi_no)) {
+        return false;
+      }
+      if (normalizeKey_(item.fabric_name) !== normalizeKey_(record.fabric_name)) {
+        return false;
+      }
+      if (record.gsm && normalizeKey_(item.gsm) !== normalizeKey_(record.gsm)) {
+        return false;
+      }
+      if (record.width && normalizeKey_(item.width) !== normalizeKey_(record.width)) {
+        return false;
+      }
+      return true;
+    });
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const uniqueGroups = {};
+  matches.forEach(function (item) {
+    uniqueGroups[getFabricGroupKey_(item)] = item;
+  });
+
+  if (Object.keys(uniqueGroups).length > 1) {
+    return null;
+  }
+
+  const first = matches[0];
+  return {
+    pi_id: first.pi_id,
+    pi_no: first.pi_no,
+    fabric_name: first.fabric_name,
+    gsm: record.gsm || first.gsm || '',
+    width: record.width || first.width || '',
+    unit: first.unit || 'Kg',
+  };
+}
+
+function getFabricGroupKey_(record) {
+  return [
+    normalizeKey_(record.pi_id || record.pi_no),
+    normalizeKey_(record.fabric_name),
+    normalizeKey_(record.gsm),
+    normalizeKey_(record.width),
+  ].join('|');
+}
+
+function findDyeingItemForGreigeLot_(greigeLot, record) {
+  const matches = getSheetObjects_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('PI_Items'))
+    .filter(function (item) {
+      if (greigeLot.pi_id && String(item.pi_id) !== String(greigeLot.pi_id)) {
+        return false;
+      }
+      if (!greigeLot.pi_id && normalizeKey_(item.pi_no) !== normalizeKey_(greigeLot.pi_no)) {
+        return false;
+      }
+      if (normalizeKey_(item.fabric_name) !== normalizeKey_(greigeLot.fabric_name)) {
+        return false;
+      }
+      if (record.line_no && normalizeKey_(item.line_no) !== normalizeKey_(record.line_no)) {
+        return false;
+      }
+      if (record.colour && normalizeKey_(item.colour) !== normalizeKey_(record.colour)) {
+        return false;
+      }
+      return true;
+    });
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function getGreigeLotByNo_(greigeLotNo) {
   const key = normalizeKey_(greigeLotNo);
   return getSheetObjects_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Greige_Lots'))
@@ -1023,9 +1121,9 @@ function getGreigeImportNaturalKey_(record) {
   return [
     'GREIGE',
     normalizeKey_(record.pi_no),
-    normalizeKey_(record.line_no),
     normalizeKey_(record.fabric_name),
-    normalizeKey_(record.colour),
+    normalizeKey_(record.gsm),
+    normalizeKey_(record.width),
     normalizeKey_(record.received_date),
     normalizeKey_(record.machine_no),
     normalizeKey_(record.job_worker_name),
@@ -1300,10 +1398,11 @@ function addGreigeLot_(payload) {
     greige_lot_id: payload.greige_lot_id || makeId_('GREIGE'),
     source_key: payload.source_key || '',
     greige_lot_no: greigeLotNo,
-    pi_item_id: piItemId,
+    pi_id: item.pi_id || '',
     pi_no: item.pi_no || '',
     fabric_name: item.fabric_name || '',
-    colour: item.colour || '',
+    gsm: item.gsm || '',
+    width: item.width || '',
     received_date: payload.received_date || payload.production_date || today_(),
     source_type: payload.source_type || payload.production_type || 'In-house',
     machine_no: payload.machine_no || '',
@@ -1312,12 +1411,16 @@ function addGreigeLot_(payload) {
     rolls: rolls,
     weight_qty: weightQty,
     unit: payload.unit || item.unit || 'Kg',
+    dyeing_sent_rolls: 0,
+    dyeing_sent_weight: 0,
+    balance_rolls: rolls,
+    balance_weight: weightQty,
     status: payload.status || 'Received',
     remarks: payload.remarks || '',
     created_at: new Date().toISOString(),
   });
 
-  recalculateItem_(piItemId);
+  recalculateFabricGroup_(item.pi_id, item.fabric_name, item.gsm, item.width);
   return readAll_();
 }
 
@@ -1325,13 +1428,17 @@ function addDyeingLot_(payload) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const greigeLotNo = payload.greige_lot_no || '';
   const greigeLot = greigeLotNo ? getGreigeLotByNo_(greigeLotNo) : null;
-  const piItemId = payload.pi_item_id || (greigeLot ? greigeLot.pi_item_id : '');
+  const piItemId = payload.pi_item_id || '';
 
   if (!piItemId) {
     throw new Error('PI item is required.');
   }
 
   const item = getPiItemById_(piItemId);
+  if (greigeLot && !isSameFabricGroup_(item, greigeLot)) {
+    throw new Error('Selected greige lot does not belong to this fabric group.');
+  }
+
   const sentWeight = toNumber_(payload.sent_weight || payload.sent_qty);
   const receivedWeight = toNumber_(payload.received_weight || payload.received_qty);
   const sentRolls = toNumber_(payload.sent_rolls);
@@ -1347,6 +1454,7 @@ function addDyeingLot_(payload) {
     greige_lot_no: greigeLot ? greigeLot.greige_lot_no : greigeLotNo,
     pi_item_id: piItemId,
     pi_no: item.pi_no || '',
+    fabric_name: item.fabric_name || '',
     dyeing_party: payload.dyeing_party || '',
     sent_date: payload.sent_date || today_(),
     sent_rolls: sentRolls,
@@ -1363,6 +1471,9 @@ function addDyeingLot_(payload) {
     created_at: new Date().toISOString(),
   });
 
+  if (greigeLot) {
+    recalculateGreigeLot_(greigeLot.greige_lot_id);
+  }
   recalculateItem_(piItemId);
   return readAll_();
 }
@@ -1385,13 +1496,65 @@ function upsertMaster_(payload) {
   return readAll_();
 }
 
+function recalculateFabricGroup_(piId, fabricName, gsm, width) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  getSheetObjects_(spreadsheet.getSheetByName('PI_Items'))
+    .filter(function (lot) {
+      return isSameFabricGroup_(lot, {
+        pi_id: piId,
+        fabric_name: fabricName,
+        gsm: gsm,
+        width: width,
+      });
+    })
+    .forEach(function (item) {
+      recalculateItem_(item.pi_item_id);
+    });
+}
+
+function recalculateGreigeLot_(greigeLotId) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const greigeSheet = spreadsheet.getSheetByName('Greige_Lots');
+  const rowNumber = findRowByValue_(greigeSheet, 'greige_lot_id', greigeLotId);
+
+  if (!rowNumber) {
+    return;
+  }
+
+  const greigeLot = getObjectFromRow_(greigeSheet, rowNumber);
+  const dyeingLots = getSheetObjects_(spreadsheet.getSheetByName('Dyeing_Lots'))
+    .filter(function (lot) {
+      return String(lot.greige_lot_id) === String(greigeLotId) ||
+        (greigeLot.greige_lot_no && normalizeKey_(lot.greige_lot_no) === normalizeKey_(greigeLot.greige_lot_no));
+    });
+  const sentRolls = dyeingLots.reduce(function (total, lot) {
+    return total + toNumber_(lot.sent_rolls);
+  }, 0);
+  const sentWeight = dyeingLots.reduce(function (total, lot) {
+    return total + toNumber_(lot.sent_weight || lot.sent_qty);
+  }, 0);
+  const balanceRolls = Math.max(toNumber_(greigeLot.rolls) - sentRolls, 0);
+  const balanceWeight = Math.max(toNumber_(greigeLot.weight_qty) - sentWeight, 0);
+  let status = 'Received';
+
+  if (sentWeight > 0 && balanceWeight > 0) {
+    status = 'Part Sent';
+  } else if (sentWeight > 0 && balanceWeight <= 0) {
+    status = 'Fully Sent';
+  }
+
+  updateObjectAtRow_(greigeSheet, rowNumber, {
+    dyeing_sent_rolls: sentRolls,
+    dyeing_sent_weight: sentWeight,
+    balance_rolls: balanceRolls,
+    balance_weight: balanceWeight,
+    status: status,
+  });
+}
+
 function recalculateItem_(piItemId) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const itemSheet = spreadsheet.getSheetByName('PI_Items');
-  const greigeLots = getSheetObjects_(spreadsheet.getSheetByName('Greige_Lots'))
-    .filter(function (lot) {
-      return String(lot.pi_item_id) === String(piItemId);
-    });
   const dyeingLots = getSheetObjects_(spreadsheet.getSheetByName('Dyeing_Lots'))
     .filter(function (lot) {
       return String(lot.pi_item_id) === String(piItemId);
@@ -1405,9 +1568,8 @@ function recalculateItem_(piItemId) {
   const item = getObjectFromRow_(itemSheet, itemRow);
   const orderedQty = toNumber_(item.ordered_qty);
   const plannedQty = toNumber_(item.planned_qty);
-  const producedQty = greigeLots.reduce(function (total, lot) {
-    return total + toNumber_(lot.weight_qty);
-  }, 0);
+  const fabricGroup = getFabricGroupProgress_(item);
+  const producedQty = fabricGroup.itemGreigeQty;
   const dyeingSentQty = dyeingLots.reduce(function (total, lot) {
     return total + toNumber_(lot.sent_weight || lot.sent_qty);
   }, 0);
@@ -1429,6 +1591,55 @@ function recalculateItem_(piItemId) {
   });
 
   recalculatePi_(item.pi_id);
+}
+
+function getFabricGroupProgress_(item) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const groupItems = getSheetObjects_(spreadsheet.getSheetByName('PI_Items'))
+    .filter(function (candidate) {
+      return isSameFabricGroup_(candidate, item);
+    });
+  const groupOrderedQty = groupItems.reduce(function (total, groupItem) {
+    return total + toNumber_(groupItem.ordered_qty);
+  }, 0);
+  const greigeQty = getSheetObjects_(spreadsheet.getSheetByName('Greige_Lots'))
+    .filter(function (lot) {
+      return isSameFabricGroup_(lot, item);
+    })
+    .reduce(function (total, lot) {
+      return total + toNumber_(lot.weight_qty);
+    }, 0);
+  const ratio = groupOrderedQty > 0 ? Math.min(greigeQty / groupOrderedQty, 1) : 0;
+
+  return {
+    groupOrderedQty: groupOrderedQty,
+    groupGreigeQty: greigeQty,
+    itemGreigeQty: Math.min(toNumber_(item.ordered_qty), toNumber_(item.ordered_qty) * ratio),
+  };
+}
+
+function isSameFabricGroup_(record, group) {
+  if (group.pi_id && record.pi_id && String(record.pi_id) !== String(group.pi_id)) {
+    return false;
+  }
+
+  if ((!group.pi_id || !record.pi_id) && normalizeKey_(record.pi_no) !== normalizeKey_(group.pi_no)) {
+    return false;
+  }
+
+  if (normalizeKey_(record.fabric_name) !== normalizeKey_(group.fabric_name)) {
+    return false;
+  }
+
+  if (group.gsm && record.gsm && normalizeKey_(record.gsm) !== normalizeKey_(group.gsm)) {
+    return false;
+  }
+
+  if (group.width && record.width && normalizeKey_(record.width) !== normalizeKey_(group.width)) {
+    return false;
+  }
+
+  return true;
 }
 
 function recalculatePi_(piId) {
@@ -1480,7 +1691,7 @@ function getItemStatus_(orderedQty, plannedQty, producedQty, dyeingSentQty, dyei
   }
 
   if (producedQty > 0) {
-    return 'In Production';
+    return 'Greige Received';
   }
 
   if (plannedQty > 0) {

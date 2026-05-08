@@ -89,26 +89,29 @@ This test version treats greige receipt as its own lot stage.
 Flow:
 
 1. PI items are still imported or created colour-wise.
-2. Greige fabric received from machines or job workers is entered in `Greige_Lots`.
-3. Each greige receipt gets a `greige_lot_no`.
-4. Dyeing is tracked against the greige lot number.
-5. Dyeing sent and received are tracked in both rolls and weight.
+2. Greige fabric received from machines or job workers is entered fabric-wise, not colour-wise.
+3. The greige group is `PI + fabric + GSM + width`.
+4. Each greige receipt gets a `greige_lot_no`.
+5. Colour-wise tracking starts when a greige lot is sent to dyeing.
+6. Dyeing sent and received are tracked in both rolls and weight.
 
 `Greige_Lots` important columns:
 
 | Column | Meaning |
 |---|---|
 | `greige_lot_no` | Lot number assigned when greige is received. |
-| `pi_item_id` | Linked PMS item. |
+| `pi_id` | Linked PMS PI. |
 | `pi_no` | PI number. |
-| `fabric_name` | Fabric name. |
-| `colour` | Order colour for matching. |
+| `fabric_name` | Fabric group, for example `SPUN FLEECE`. |
+| `gsm` | Fabric GSM, used to avoid mixing different qualities. |
+| `width` | Width/dia, used to avoid mixing different qualities. |
 | `received_date` | Date greige was received. |
 | `source_type` | `In-house` or `Job worker`. |
 | `machine_no` | Machine number, if in-house. |
 | `job_worker_name` | Job worker, if outside. |
 | `rolls` | Received rolls. |
 | `weight_qty` | Received greige weight. |
+| `balance_weight` | Greige balance after dyeing sends. |
 
 `Dyeing_Lots` important columns:
 
@@ -131,7 +134,7 @@ For copy-paste import of greige receipts, use `Greige_Lot_Import`.
 
 Fill:
 
-`source_key`, `greige_lot_no`, `pi_no`, `line_no`, `fabric_name`, `colour`, `received_date`, `source_type`, `machine_no`, `job_worker_name`, `rolls`, `weight_qty`, `unit`, `remarks`
+`source_key`, `greige_lot_no`, `pi_no`, `fabric_name`, `gsm`, `width`, `received_date`, `source_type`, `machine_no`, `job_worker_name`, `rolls`, `weight_qty`, `unit`, `remarks`
 
 Then run:
 
