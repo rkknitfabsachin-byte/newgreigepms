@@ -246,9 +246,268 @@ h3 {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
+}
+
+.metric-card .metric-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.metric-card.tone-brand .metric-sub { color: var(--brand); }
+.metric-card.tone-good .metric-sub { color: var(--good); }
+.metric-card.tone-warn .metric-sub { color: var(--warn); }
+.metric-card.tone-bad .metric-sub { color: var(--bad); }
+
+/* ── Pipeline ── */
+.pipeline-panel {
+  margin-bottom: 18px;
+}
+
+.pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.pipeline-stage {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition: transform 160ms ease;
+}
+
+.pipeline-stage:hover {
+  transform: translateY(-2px);
+}
+
+.pipeline-icon {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--brand);
+}
+
+.pipeline-count {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 4px 0 2px;
+}
+
+.pipeline-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pipeline-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.pipeline-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width 400ms ease;
+}
+
+.pipeline-arrow {
+  flex-shrink: 0;
+  padding: 0 4px;
+  color: var(--line-strong);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ── PI Progress Cards ── */
+.pi-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.pi-progress-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.pi-progress-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.pi-progress-card.is-delayed {
+  border-left: 3px solid var(--bad);
+}
+
+.pi-prog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pi-prog-bars {
+  display: grid;
+  gap: 5px;
+}
+
+.prog-row {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.prog-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.prog-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 400ms ease;
+}
+
+.prog-fill.greige {
+  background: linear-gradient(90deg, #60a5fa, #3b82f6);
+}
+
+.prog-fill.final {
+  background: linear-gradient(90deg, #34d399, #10b981);
+}
+
+.pi-prog-date {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pi-prog-date.delayed {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+/* ── Collapsible Fabric Groups ── */
+.grouped-items {
+  display: grid;
+  gap: 8px;
+}
+
+.fabric-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.fabric-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: var(--surface-2);
+  text-align: left;
+  transition: background 160ms ease;
+}
+
+.fabric-group-header:hover {
+  background: #e8edf5;
+}
+
+.fg-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fg-chevron {
+  font-size: 14px;
+  color: var(--muted);
+  transition: transform 200ms ease;
+  flex-shrink: 0;
+}
+
+.fg-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.fg-meta {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fg-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.fg-progress {
+  width: 80px;
+}
+
+.fg-pct {
+  font-size: 13px;
+  font-weight: 800;
+  min-width: 36px;
+  text-align: right;
+}
+
+.fabric-group-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.fabric-group-body.is-collapsed {
+  display: none;
+}
+
+.dash-section {
+  margin-bottom: 18px;
+}
+
+.dash-section:empty {
+  margin-bottom: 0;
+}
+
+.pi-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card,

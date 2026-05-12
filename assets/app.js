@@ -76,6 +76,7 @@ const state = {
   selectedPiId: '',
   selectedItemId: '',
   workflow: 'yarns',
+  expandedGroups: {},
   deferredInstall: null,
   lastError: '',
 };
@@ -129,7 +130,7 @@ function bindEvents() {
 }
 
 function handleClick(event) {
-  const viewButton = event.target.closest('[data-view-button]');
+  var viewButton = event.target.closest('[data-view-button]');
   if (viewButton) {
     setView(viewButton.dataset.viewButton);
     return;
@@ -140,9 +141,9 @@ function handleClick(event) {
     return;
   }
 
-  const removeItemButton = event.target.closest('[data-remove-item]');
+  var removeItemButton = event.target.closest('[data-remove-item]');
   if (removeItemButton) {
-    const editor = removeItemButton.closest('[data-item-editor]');
+    var editor = removeItemButton.closest('[data-item-editor]');
     if (document.querySelectorAll('[data-item-editor]').length > 1) {
       editor.remove();
       renumberItemEditors();
@@ -150,7 +151,15 @@ function handleClick(event) {
     return;
   }
 
-  const piRow = event.target.closest('[data-select-pi]');
+  var groupToggle = event.target.closest('[data-toggle-group]');
+  if (groupToggle) {
+    var key = groupToggle.dataset.toggleGroup;
+    state.expandedGroups[key] = !state.expandedGroups[key];
+    renderPiDetail();
+    return;
+  }
+
+  var piRow = event.target.closest('[data-select-pi]');
   if (piRow) {
     state.selectedPiId = piRow.dataset.selectPi;
     state.selectedItemId = '';
@@ -159,14 +168,14 @@ function handleClick(event) {
     return;
   }
 
-  const itemCard = event.target.closest('[data-select-item]');
+  var itemCard = event.target.closest('[data-select-item]');
   if (itemCard) {
     state.selectedItemId = itemCard.dataset.selectItem;
     renderPiDetail();
     return;
   }
 
-  const workflowButton = event.target.closest('[data-workflow]');
+  var workflowButton = event.target.closest('[data-workflow]');
   if (workflowButton) {
     state.workflow = workflowButton.dataset.workflow;
     renderPiDetail();
@@ -249,23 +258,28 @@ function renderAll() {
 }
 
 function renderDashboard() {
-  const pis = rows('PIs');
-  const items = rows('PI_Items');
-  const openPis = pis.filter(function (pi) {
-    return pi.status !== 'Completed';
-  }).length;
-  const orderedQty = sum(items, 'ordered_qty');
-  const producedQty = sum(items, 'greige_produced_qty');
-  const receivedQty = sum(items, 'dyeing_received_qty');
-  const delayedItems = getDelayedItems();
+  var pis = rows('PIs');
+  var items = rows('PI_Items');
+  var openPis = pis.filter(function (pi) { return pi.status !== 'Completed'; }).length;
+  var orderedQty = sum(items, 'ordered_qty');
+  var producedQty = sum(items, 'greige_produced_qty');
+  var dyeingSentQty = sum(items, 'dyeing_sent_qty');
+  var receivedQty = sum(items, 'dyeing_received_qty');
+  var delayedItems = getDelayedItems();
+  var completedItems = items.filter(function (i) { return i.status === 'Completed'; }).length;
+  var completionPct = items.length > 0 ? Math.round((completedItems / items.length) * 100) : 0;
 
   document.getElementById('metricGrid').innerHTML = [
-    metricCard('Open PIs', openPis),
-    metricCard('Ordered Qty', formatNumber(orderedQty)),
-    metricCard('Greige Produced', formatNumber(producedQty)),
-    metricCard('Dyeing Received', formatNumber(receivedQty)),
+    metricCardEx('Total PIs', pis.length, openPis + ' open', 'brand'),
+    metricCardEx('Ordered', formatNumber(orderedQty), items.length + ' items', ''),
+    metricCardEx('Greige', formatNumber(producedQty), pctOf(producedQty, orderedQty) + '% produced', 'good'),
+    metricCardEx('In Dyeing', formatNumber(dyeingSentQty), formatNumber(Math.max(dyeingSentQty - receivedQty, 0)) + ' pending', 'warn'),
+    metricCardEx('Received', formatNumber(receivedQty), pctOf(receivedQty, orderedQty) + '% done', 'good'),
+    metricCardEx('Delayed', delayedItems.length, delayedItems.length > 0 ? 'Action needed' : 'On track', delayedItems.length > 0 ? 'bad' : 'good'),
   ].join('');
 
+  renderPipeline(items);
+  renderPiProgressCards(pis);
   renderPriorityList(delayedItems);
   renderStatusStack();
 }
@@ -337,6 +351,57 @@ function renderStatusStack() {
   }).join('');
 }
 
+function renderPipeline(items) {
+  var stages = [
+    { key: 'New', label: 'New', icon: '○' },
+    { key: 'Planned', label: 'Planned', icon: '◐' },
+    { key: 'Greige Received', label: 'Greige', icon: '◧' },
+    { key: 'In Dyeing', label: 'Dyeing', icon: '◑' },
+    { key: 'Part Received', label: 'Part Rcvd', icon: '◕' },
+    { key: 'Completed', label: 'Done', icon: '●' },
+  ];
+  var counts = groupCount(items, 'status');
+  var total = Math.max(items.length, 1);
+  document.getElementById('pipelinePanel').innerHTML =
+    '<div class="panel-heading"><h2>Production Pipeline</h2><span class="muted">' + items.length + ' items</span></div>' +
+    '<div class="pipeline">' + stages.map(function (stage, i) {
+      var count = (counts[stage.key] || 0) + (stage.key === 'Greige Received' ? (counts['Greige Ready'] || 0) : 0);
+      var pct = Math.round((count / total) * 100);
+      return '<div class="pipeline-stage">' +
+        '<div class="pipeline-icon">' + stage.icon + '</div>' +
+        '<div class="pipeline-count">' + count + '</div>' +
+        '<div class="pipeline-label">' + stage.label + '</div>' +
+        '<div class="pipeline-bar"><span style="width:' + pct + '%"></span></div>' +
+      '</div>' + (i < stages.length - 1 ? '<div class="pipeline-arrow">→</div>' : '');
+    }).join('') + '</div>';
+}
+
+function renderPiProgressCards(pis) {
+  var activePis = pis.filter(function (pi) { return pi.status !== 'Completed'; });
+  var container = document.getElementById('piProgressSection');
+  if (activePis.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML =
+    '<div class="panel"><div class="panel-heading"><h2>Active Orders</h2><span class="muted">' + activePis.length + ' in progress</span></div>' +
+    '<div class="pi-progress-grid">' + activePis.slice(0, 12).map(function (pi) {
+      var piItems = getItems(pi.pi_id);
+      var ordered = sum(piItems, 'ordered_qty');
+      var received = sum(piItems, 'dyeing_received_qty');
+      var greige = sum(piItems, 'greige_produced_qty');
+      var pct = ordered > 0 ? Math.round((received / ordered) * 100) : 0;
+      var gPct = ordered > 0 ? Math.round((greige / ordered) * 100) : 0;
+      var isDelayed = pi.delivery_date && pi.delivery_date < todayIso();
+      return '<button class="pi-progress-card' + (isDelayed ? ' is-delayed' : '') + '" type="button" data-select-pi="' + escapeAttr(pi.pi_id) + '">' +
+        '<div class="pi-prog-head"><strong>' + escapeHtml(pi.pi_no) + '</strong>' + statusChip(pi.status) + '</div>' +
+        '<span class="muted">' + escapeHtml(pi.customer_name) + '</span>' +
+        '<div class="pi-prog-bars">' +
+          '<div class="prog-row"><span>Greige</span><div class="prog-track"><div class="prog-fill greige" style="width:' + gPct + '%"></div></div><span>' + gPct + '%</span></div>' +
+          '<div class="prog-row"><span>Final</span><div class="prog-track"><div class="prog-fill final" style="width:' + pct + '%"></div></div><span>' + pct + '%</span></div>' +
+        '</div>' +
+        (pi.delivery_date ? '<span class="pi-prog-date' + (isDelayed ? ' delayed' : '') + '">' + escapeHtml(pi.delivery_date) + '</span>' : '') +
+      '</button>';
+    }).join('') + '</div></div>';
+}
+
 function renderOrders() {
   const search = document.getElementById('orderSearch').value.trim().toLowerCase();
   const status = document.getElementById('statusFilter').value;
@@ -378,8 +443,8 @@ function renderPiRow(pi) {
 }
 
 function renderPiDetail() {
-  const panel = document.getElementById('piDetail');
-  const pi = rows('PIs').find(function (record) {
+  var panel = document.getElementById('piDetail');
+  var pi = rows('PIs').find(function (record) {
     return record.pi_id === state.selectedPiId;
   });
 
@@ -388,13 +453,15 @@ function renderPiDetail() {
     return;
   }
 
-  const items = getItems(pi.pi_id);
+  var items = getItems(pi.pi_id);
   if (!state.selectedItemId && items[0]) {
     state.selectedItemId = items[0].pi_item_id;
   }
-  const selectedItem = items.find(function (item) {
+  var selectedItem = items.find(function (item) {
     return item.pi_item_id === state.selectedItemId;
   }) || items[0];
+
+  var groups = buildFabricGroups(items);
 
   panel.innerHTML = '<div class="panel-heading">' +
     '<div><h2>' + escapeHtml(pi.pi_no) + '</h2><span class="muted">' + escapeHtml(pi.customer_name) + '</span></div>' +
@@ -402,13 +469,61 @@ function renderPiDetail() {
   '</div>' +
   '<div class="pi-summary">' +
     summaryTile('Items', items.length) +
+    summaryTile('Fab Groups', groups.length) +
     summaryTile('Ordered', formatNumber(sum(items, 'ordered_qty'))) +
     summaryTile('Received', formatNumber(sum(items, 'dyeing_received_qty'))) +
   '</div>' +
-  '<div class="item-list">' + items.map(renderItemCard).join('') + '</div>' +
+  renderGroupedItems(groups) +
   (selectedItem ? renderWorkflow(selectedItem) : '');
 
   bindWorkflowForms();
+}
+
+function buildFabricGroups(items) {
+  var groupMap = {};
+  var groupOrder = [];
+  items.forEach(function (item) {
+    var key = getGroupKey(item);
+    if (!groupMap[key]) {
+      groupMap[key] = { key: key, fabric_name: item.fabric_name, gsm: item.gsm, width: item.width, items: [] };
+      groupOrder.push(key);
+    }
+    groupMap[key].items.push(item);
+  });
+  return groupOrder.map(function (key) { return groupMap[key]; });
+}
+
+function getGroupKey(item) {
+  return [normalizeKey(item.pi_id || ''), normalizeKey(item.fabric_name || ''), normalizeKey(item.gsm || ''), normalizeKey(item.width || '')].join('|');
+}
+
+function renderGroupedItems(groups) {
+  return '<div class="grouped-items">' + groups.map(function (group) {
+    var isExpanded = state.expandedGroups[group.key] !== false;
+    var totalOrdered = sum(group.items, 'ordered_qty');
+    var totalReceived = sum(group.items, 'dyeing_received_qty');
+    var pct = totalOrdered > 0 ? Math.round((totalReceived / totalOrdered) * 100) : 0;
+    var colours = group.items.map(function (i) { return i.colour; }).join(', ');
+    return '<div class="fabric-group">' +
+      '<button class="fabric-group-header" type="button" data-toggle-group="' + escapeAttr(group.key) + '">' +
+        '<div class="fg-left">' +
+          '<span class="fg-chevron' + (isExpanded ? ' is-open' : '') + '">▸</span>' +
+          '<div><strong>' + escapeHtml(group.fabric_name) + '</strong>' +
+            '<span class="fg-meta">' + group.items.length + ' colour' + (group.items.length > 1 ? 's' : '') +
+            ' · ' + formatNumber(totalOrdered) + ' total' +
+            (group.gsm ? ' · GSM ' + escapeHtml(group.gsm) : '') +
+            (group.width ? ' · ' + escapeHtml(group.width) : '') + '</span></div>' +
+        '</div>' +
+        '<div class="fg-right">' +
+          '<div class="fg-progress"><div class="prog-track"><div class="prog-fill final" style="width:' + pct + '%"></div></div></div>' +
+          '<span class="fg-pct">' + pct + '%</span>' +
+        '</div>' +
+      '</button>' +
+      '<div class="fabric-group-body' + (isExpanded ? '' : ' is-collapsed') + '">' +
+        group.items.map(renderItemCard).join('') +
+      '</div>' +
+    '</div>';
+  }).join('') + '</div>';
 }
 
 function renderItemCard(item) {
@@ -452,9 +567,10 @@ function renderWorkflowBody(item) {
 }
 
 function renderYarnForm(item) {
-  const yarns = getYarns(item.pi_item_id);
-  const rowsHtml = [0, 1, 2].map(function (index) {
-    const yarn = yarns[index] || {};
+  var groupItems = getFabricGroupItems(item);
+  var groupYarns = getGroupYarns(groupItems);
+  var rowsHtml = [0, 1, 2].map(function (index) {
+    var yarn = groupYarns[index] || {};
     return '<div class="form-grid compact">' +
       '<label><span>Yarn ' + (index + 1) + '</span><input name="yarn_name_' + index + '" list="yarnsList" value="' + escapeAttr(yarn.yarn_name || '') + '" placeholder="Yarn/count"></label>' +
       '<label><span>Blend %</span><input name="blend_percent_' + index + '" value="' + escapeAttr(yarn.blend_percent || '') + '" placeholder="60"></label>' +
@@ -464,12 +580,14 @@ function renderYarnForm(item) {
     '</div>';
   }).join('');
 
+  var colours = groupItems.map(function (i) { return i.colour; }).join(', ');
   return '<form id="yarnForm" class="stack-form">' +
-    '<h3>' + escapeHtml(item.fabric_name) + ' / ' + escapeHtml(item.colour) + '</h3>' +
+    '<h3>Yarn plan for ' + escapeHtml(item.fabric_name) + '</h3>' +
+    '<p class="muted" style="margin:0">Shared across ' + groupItems.length + ' colour' + (groupItems.length > 1 ? 's' : '') + ': ' + escapeHtml(colours) + '</p>' +
     rowsHtml +
-    '<button class="primary-button" type="submit">Save Yarns</button>' +
+    '<button class="primary-button" type="submit">Save Yarns (all colours)</button>' +
   '</form>' +
-  renderMiniList('Current Yarns', yarns, function (yarn) {
+  renderMiniList('Current Yarns', groupYarns, function (yarn) {
     return '<strong>' + escapeHtml(yarn.yarn_name) + '</strong><span>' +
       escapeHtml(yarn.blend_percent || '-') + '% - Shortage ' + formatNumber(yarn.shortage_qty) + '</span>';
   });
@@ -604,9 +722,12 @@ async function handleCreatePi(event) {
 
 async function handleYarnSubmit(event) {
   event.preventDefault();
-  const itemId = state.selectedItemId;
-  const form = event.currentTarget;
-  const yarns = [0, 1, 2].map(function (index) {
+  var form = event.currentTarget;
+  var selectedItem = rows('PI_Items').find(function (i) { return i.pi_item_id === state.selectedItemId; });
+  if (!selectedItem) return;
+  var groupItems = getFabricGroupItems(selectedItem);
+  var itemIds = groupItems.map(function (i) { return i.pi_item_id; });
+  var yarns = [0, 1, 2].map(function (index) {
     return {
       yarn_name: form.elements['yarn_name_' + index].value.trim(),
       blend_percent: form.elements['blend_percent_' + index].value.trim(),
@@ -618,7 +739,7 @@ async function handleYarnSubmit(event) {
     return yarn.yarn_name || number(yarn.required_qty) > 0 || number(yarn.stock_available_qty) > 0;
   });
 
-  await submitAction('saveItemYarns', { pi_item_id: itemId, yarns: yarns });
+  await submitAction('saveGroupYarns', { pi_item_ids: itemIds, yarns: yarns });
 }
 
 async function handleGreigeSubmit(event) {
@@ -732,6 +853,15 @@ function metricCard(label, value) {
   return '<article class="metric-card"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></article>';
 }
 
+function metricCardEx(label, value, sub, tone) {
+  return '<article class="metric-card' + (tone ? ' tone-' + tone : '') + '"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong><span class="metric-sub">' + escapeHtml(sub) + '</span></article>';
+}
+
+function pctOf(part, total) {
+  var t = number(total);
+  return t > 0 ? Math.round((number(part) / t) * 100) : 0;
+}
+
 function summaryTile(label, value) {
   return '<div><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
 }
@@ -808,6 +938,14 @@ function getFabricGroupItems(item) {
   return rows('PI_Items').filter(function (record) {
     return isSameFabricGroup(record, item);
   });
+}
+
+function getGroupYarns(groupItems) {
+  for (var i = 0; i < groupItems.length; i++) {
+    var yarns = getYarns(groupItems[i].pi_item_id);
+    if (yarns.length > 0) return yarns;
+  }
+  return [];
 }
 
 function getGreigeLotsForGroup(item) {

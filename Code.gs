@@ -1203,6 +1203,8 @@ function doPost(e) {
         return jsonResponse_(createPi_(request.payload || {}));
       case 'saveItemYarns':
         return jsonResponse_(saveItemYarns_(request.payload || {}));
+      case 'saveGroupYarns':
+        return jsonResponse_(saveGroupYarns_(request.payload || {}));
       case 'addProductionLot':
       case 'addGreigeLot':
         return jsonResponse_(addGreigeLot_(request.payload || {}));
@@ -1374,6 +1376,49 @@ function saveItemYarns_(payload) {
   });
 
   recalculateItem_(piItemId);
+  return readAll_();
+}
+
+function saveGroupYarns_(payload) {
+  var piItemIds = payload.pi_item_ids || [];
+  var yarns = payload.yarns || [];
+
+  if (piItemIds.length === 0) {
+    throw new Error('At least one PI item is required.');
+  }
+
+  if (yarns.length > 3) {
+    throw new Error('Only 1 to 3 yarn blends are supported.');
+  }
+
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var yarnSheet = spreadsheet.getSheetByName('Item_Yarns');
+
+  piItemIds.forEach(function (piItemId) {
+    deleteRowsWhere_(yarnSheet, 'pi_item_id', piItemId);
+
+    yarns.forEach(function (yarn, index) {
+      var requiredQty = toNumber_(yarn.required_qty);
+      var stockAvailableQty = toNumber_(yarn.stock_available_qty);
+      var shortageQty = Math.max(requiredQty - stockAvailableQty, 0);
+
+      appendObject_(yarnSheet, {
+        item_yarn_id: makeId_('YARN'),
+        pi_item_id: piItemId,
+        yarn_no: index + 1,
+        yarn_name: yarn.yarn_name || '',
+        blend_percent: yarn.blend_percent || '',
+        required_qty: requiredQty,
+        stock_available_qty: stockAvailableQty,
+        shortage_qty: shortageQty,
+        status: shortageQty > 0 ? 'Shortage' : 'Available',
+        remarks: yarn.remarks || '',
+      });
+    });
+
+    recalculateItem_(piItemId);
+  });
+
   return readAll_();
 }
 
