@@ -615,7 +615,7 @@ function renderGreigeForm(item) {
   '<form id="greigeForm" class="stack-form">' +
     '<h3>Receive greige for all ' + escapeHtml(item.fabric_name) + ' colours in this PI</h3>' +
     '<div class="form-grid">' +
-      '<label><span>Lot No</span><input name="greige_lot_no" placeholder="Auto if blank"></label>' +
+      '<label><span>Receipt / Inward No</span><input name="greige_lot_no" placeholder="Auto if blank"></label>' +
       '<label><span>Received Date</span><input name="received_date" type="date" value="' + todayIso() + '"></label>' +
       '<label><span>Source</span><select name="source_type"><option>In-house</option><option>Job worker</option></select></label>' +
       '<label><span>Machine</span><select name="machine_no"><option value="">Select</option>' + machineOptions + '</select></label>' +
@@ -626,12 +626,12 @@ function renderGreigeForm(item) {
     '</div>' +
     '<datalist id="jobWorkersList">' + workerOptions + '</datalist>' +
     '<label><span>Remarks</span><input name="remarks" placeholder="Shift, roll or fabric notes"></label>' +
-    '<button class="primary-button" type="submit">Add Greige Lot</button>' +
+    '<button class="primary-button" type="submit">Add Greige Receipt</button>' +
   '</form>' +
-  renderMiniList('Greige Lots', lots, function (lot) {
+  renderMiniList('Greige Receipts', lots, function (lot) {
     const source = lot.source_type === 'Job worker' ? lot.job_worker_name : 'Machine ' + lot.machine_no;
     const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
-    return '<strong>' + escapeHtml(lot.greige_lot_no || '-') + ' - ' + escapeHtml(source || '-') + '</strong><span>' +
+    return '<strong>Receipt: ' + escapeHtml(lot.greige_lot_no || '-') + ' - ' + escapeHtml(source || '-') + '</strong><span>' +
       formatNumber(lot.rolls) + ' rolls / ' + formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') +
       ' - balance ' + formatNumber(balance) + '</span>';
   });
@@ -645,15 +645,17 @@ function renderDyeingForm(item) {
   }).join('');
   const greigeOptions = greigeLots.map(function (lot) {
     const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
-    return '<option value="' + escapeAttr(lot.greige_lot_no) + '">' + escapeHtml(lot.greige_lot_no) + ' - balance ' + formatNumber(balance) + ' ' + escapeHtml(lot.unit || 'Kg') + '</option>';
+    return '<option value="' + escapeAttr(lot.greige_lot_no) + '">Inward: ' + escapeHtml(lot.greige_lot_no) + ' - balance ' + formatNumber(balance) + ' ' + escapeHtml(lot.unit || 'Kg') + '</option>';
   }).join('');
   const addons = rows('Masters_Addons').map(function (addon) {
     return addon.addon_name;
   }).join(', ');
 
   return '<form id="dyeingForm" class="stack-form">' +
+    '<h3>Assign Dyeing Lot</h3>' +
     '<div class="form-grid">' +
-      '<label><span>Greige Lot</span><select name="greige_lot_no"><option value="">Select</option>' + greigeOptions + '</select></label>' +
+      '<label><span>Dyeing Lot No</span><input name="dyeing_lot_no" placeholder="Dyeing house lot no"></label>' +
+      '<label><span>From Greige Inward</span><select name="greige_lot_no"><option value="">Select</option>' + greigeOptions + '</select></label>' +
       '<label><span>Dyeing Party</span><input name="dyeing_party" placeholder="Dyeing house"></label>' +
       '<label><span>Sent Date</span><input name="sent_date" type="date" value="' + todayIso() + '"></label>' +
       '<label><span>Sent Rolls</span><input name="sent_rolls" type="number" step="1" min="0"></label>' +
@@ -667,12 +669,12 @@ function renderDyeingForm(item) {
       '<label><span>Addons</span><input name="addons" placeholder="' + escapeAttr(addons || 'Silicon, Softener') + '"></label>' +
     '</div>' +
     '<label><span>Remarks</span><input name="remarks" placeholder="Dyeing or finish notes"></label>' +
-    '<button class="primary-button" type="submit">Add Dyeing</button>' +
+    '<button class="primary-button" type="submit">Assign Dyeing Lot</button>' +
   '</form>' +
-  renderMiniList('Dyeing Lots', lots, function (lot) {
-    return '<strong>' + escapeHtml(lot.greige_lot_no || '-') + ' - ' + escapeHtml(lot.dyeing_party || '-') + '</strong><span>' +
-      formatNumber(lot.received_rolls) + ' rolls / ' + formatNumber(lot.received_weight) + ' received from ' +
-      formatNumber(lot.sent_rolls) + ' rolls / ' + formatNumber(lot.sent_weight) + ' sent</span>';
+  renderMiniList('Assigned Dyeing Lots', lots, function (lot) {
+    return '<strong>Lot: ' + escapeHtml(lot.dyeing_lot_no || '-') + ' (' + escapeHtml(lot.dyeing_party || '-') + ')</strong><span>' +
+      formatNumber(lot.received_rolls) + ' rolls / ' + formatNumber(lot.received_weight) + ' received from Inward ' +
+      escapeHtml(lot.greige_lot_no) + '</span>';
   });
 }
 
