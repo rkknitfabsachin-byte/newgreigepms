@@ -83,6 +83,10 @@
                 <option value="Completed">Completed</option>
               </select>
             </label>
+            <label class="select-field">
+              <span>Colour</span>
+              <input id="colourFilter" list="colourList" placeholder="Any colour" autocomplete="off">
+            </label>
           </div>
 
           <div class="orders-layout">
@@ -190,6 +194,7 @@
                     <option value="Masters_JobWorkers">Job Worker</option>
                     <option value="Masters_DyeingProcesses">Dyeing Process</option>
                     <option value="Masters_Addons">Addon</option>
+                    <option value="Masters_DyeingHouses">Dyeing House</option>
                   </select>
                 </label>
                 <div id="masterFields"></div>
@@ -212,6 +217,7 @@
     <datalist id="customersList"></datalist>
     <datalist id="fabricsList"></datalist>
     <datalist id="yarnsList"></datalist>
+    <datalist id="colourList"></datalist>
 
     <template id="itemEditorTemplate">
       <div class="item-editor" data-item-editor>

@@ -52,6 +52,11 @@ const MASTER_FIELDS = {
   Masters_Addons: [
     ['addon_name', 'Addon Name', true],
   ],
+  Masters_DyeingHouses: [
+    ['dyeing_house_name', 'Dyeing House Name', true],
+    ['phone', 'Phone', false],
+    ['address', 'Address', false],
+  ],
 };
 
 const MASTER_LABELS = {
@@ -62,6 +67,7 @@ const MASTER_LABELS = {
   Masters_JobWorkers: 'Job Workers',
   Masters_DyeingProcesses: 'Dyeing Processes',
   Masters_Addons: 'Addons',
+  Masters_DyeingHouses: 'Dyeing Houses',
 };
 
 const VIEW_TITLES = {
@@ -397,7 +403,10 @@ function renderPiProgressCards(pis) {
           '<div class="prog-row"><span>Greige</span><div class="prog-track"><div class="prog-fill greige" style="width:' + gPct + '%"></div></div><span>' + gPct + '%</span></div>' +
           '<div class="prog-row"><span>Final</span><div class="prog-track"><div class="prog-fill final" style="width:' + pct + '%"></div></div><span>' + pct + '%</span></div>' +
         '</div>' +
-        (pi.delivery_date ? '<span class="pi-prog-date' + (isDelayed ? ' delayed' : '') + '">' + escapeHtml(pi.delivery_date) + '</span>' : '') +
+        '<div class="pi-prog-foot">' +
+          (pi.delivery_date ? '<span class="pi-prog-date' + (isDelayed ? ' delayed' : '') + '">' + escapeHtml(pi.delivery_date) + '</span>' : '<span></span>') +
+          '<span class="text-button" style="margin-left: auto;">Update</span>' +
+        '</div>' +
       '</button>';
     }).join('') + '</div></div>';
 }
@@ -405,6 +414,7 @@ function renderPiProgressCards(pis) {
 function renderOrders() {
   const search = document.getElementById('orderSearch').value.trim().toLowerCase();
   const status = document.getElementById('statusFilter').value;
+  const colourFilter = document.getElementById('colourFilter').value.trim().toLowerCase();
   const pis = rows('PIs').filter(function (pi) {
     const items = getItems(pi.pi_id);
     const haystack = [
@@ -414,7 +424,12 @@ function renderOrders() {
       pi.status,
       items.map(function (item) { return item.fabric_name + ' ' + item.colour; }).join(' '),
     ].join(' ').toLowerCase();
-    return (!status || pi.status === status) && (!search || haystack.indexOf(search) !== -1);
+    
+    const matchesColour = !colourFilter || items.some(function(item) {
+      return (item.colour || '').toLowerCase().indexOf(colourFilter) !== -1;
+    });
+
+    return (!status || pi.status === status) && (!search || haystack.indexOf(search) !== -1) && matchesColour;
   });
 
   document.getElementById('orderCount').textContent = pis.length + ' PIs';
@@ -638,41 +653,63 @@ function renderGreigeForm(item) {
 }
 
 function renderDyeingForm(item) {
-  const lots = getDyeingLots(item.pi_item_id);
-  const greigeLots = getGreigeLotsForGroup(item);
+  const colourGroupItems = getItems(item.pi_id).filter(function(i) {
+    return normalizeKey(i.colour) === normalizeKey(item.colour);
+  });
+  
   const processes = rows('Masters_DyeingProcesses').map(function (process) {
     return '<option value="' + escapeAttr(process.process_name) + '">' + escapeHtml(process.process_name) + '</option>';
   }).join('');
-  const greigeOptions = greigeLots.map(function (lot) {
-    const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
-    return '<option value="' + escapeAttr(lot.greige_lot_no) + '">Inward: ' + escapeHtml(lot.greige_lot_no) + ' - balance ' + formatNumber(balance) + ' ' + escapeHtml(lot.unit || 'Kg') + '</option>';
+  const dyeingHouses = rows('Masters_DyeingHouses').map(function (house) {
+    return '<option value="' + escapeAttr(house.dyeing_house_name) + '">' + escapeHtml(house.dyeing_house_name) + '</option>';
   }).join('');
   const addons = rows('Masters_Addons').map(function (addon) {
     return addon.addon_name;
   }).join(', ');
 
+  const itemsHtml = colourGroupItems.map(function(cItem, index) {
+    const greigeLots = getGreigeLotsForGroup(cItem);
+    const greigeOptions = greigeLots.map(function (lot) {
+      const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
+      return '<option value="' + escapeAttr(lot.greige_lot_no) + '">Inward: ' + escapeHtml(lot.greige_lot_no) + ' - bal ' + formatNumber(balance) + '</option>';
+    }).join('');
+    
+    return '<div class="item-dyeing-row" style="border-top:1px solid var(--border-color); padding-top:12px; margin-top:12px;">' +
+      '<h4>' + escapeHtml(cItem.fabric_name) + ' <span class="muted">(' + formatNumber(cItem.ordered_qty) + ' ' + escapeHtml(cItem.unit || 'Kg') + ')</span></h4>' +
+      '<input type="hidden" name="pi_item_id_' + index + '" value="' + escapeAttr(cItem.pi_item_id) + '">' +
+      '<div class="form-grid compact">' +
+        '<label><span>Dyeing Lot No</span><input name="dyeing_lot_no_' + index + '" placeholder="e.g. 1234"></label>' +
+        '<label><span>Greige Inward</span><select name="greige_lot_no_' + index + '"><option value="">Select</option>' + greigeOptions + '</select></label>' +
+        '<label><span>Sent Rolls</span><input name="sent_rolls_' + index + '" type="number" step="1" min="0"></label>' +
+        '<label><span>Sent Weight</span><input name="sent_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
+        '<label><span>Received Rolls</span><input name="received_rolls_' + index + '" type="number" step="1" min="0"></label>' +
+        '<label><span>Received Weight</span><input name="received_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
+        '<label><span>Loss Weight</span><input name="loss_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  const allLots = [];
+  colourGroupItems.forEach(function(cItem) {
+    allLots.push.apply(allLots, getDyeingLots(cItem.pi_item_id));
+  });
+
   return '<form id="dyeingForm" class="stack-form">' +
-    '<h3>Assign Dyeing Lot</h3>' +
+    '<h3>Assign Dyeing Lot for ' + escapeHtml(item.colour) + '</h3>' +
+    '<p class="muted" style="margin:0">Applies to ' + colourGroupItems.length + ' item(s) sharing this colour.</p>' +
     '<div class="form-grid">' +
-      '<label><span>Dyeing Lot No</span><input name="dyeing_lot_no" placeholder="Dyeing house lot no"></label>' +
-      '<label><span>From Greige Inward</span><select name="greige_lot_no"><option value="">Select</option>' + greigeOptions + '</select></label>' +
-      '<label><span>Dyeing Party</span><input name="dyeing_party" placeholder="Dyeing house"></label>' +
+      '<label><span>Dyeing House</span><select name="dyeing_party"><option value="">Select</option>' + dyeingHouses + '</select></label>' +
       '<label><span>Sent Date</span><input name="sent_date" type="date" value="' + todayIso() + '"></label>' +
-      '<label><span>Sent Rolls</span><input name="sent_rolls" type="number" step="1" min="0"></label>' +
-      '<label><span>Sent Weight</span><input name="sent_weight" type="number" step="0.01" min="0"></label>' +
-      '<label><span>Colour</span><input name="colour" value="' + escapeAttr(item.colour || '') + '"></label>' +
       '<label><span>Process</span><select name="process_type"><option value="">Select</option>' + processes + '</select></label>' +
       '<label><span>Received Date</span><input name="received_date" type="date"></label>' +
-      '<label><span>Received Rolls</span><input name="received_rolls" type="number" step="1" min="0"></label>' +
-      '<label><span>Received Weight</span><input name="received_weight" type="number" step="0.01" min="0"></label>' +
-      '<label><span>Loss Weight</span><input name="loss_weight" type="number" step="0.01" min="0"></label>' +
       '<label><span>Addons</span><input name="addons" placeholder="' + escapeAttr(addons || 'Silicon, Softener') + '"></label>' +
     '</div>' +
     '<label><span>Remarks</span><input name="remarks" placeholder="Dyeing or finish notes"></label>' +
-    '<button class="primary-button" type="submit">Assign Dyeing Lot</button>' +
+    itemsHtml +
+    '<button class="primary-button" style="margin-top:16px" type="submit">Assign Dyeing Lots</button>' +
   '</form>' +
-  renderMiniList('Assigned Dyeing Lots', lots, function (lot) {
-    return '<strong>Lot: ' + escapeHtml(lot.dyeing_lot_no || '-') + ' (' + escapeHtml(lot.dyeing_party || '-') + ')</strong><span>' +
+  renderMiniList('Assigned Dyeing Lots', allLots, function (lot) {
+    return '<strong>Lot: ' + escapeHtml(lot.dyeing_lot_no || '-') + ' (' + escapeHtml(lot.dyeing_party || '-') + ') - ' + escapeHtml(lot.fabric_name) + '</strong><span>' +
       formatNumber(lot.received_rolls) + ' rolls / ' + formatNumber(lot.received_weight) + ' received from Inward ' +
       escapeHtml(lot.greige_lot_no) + '</span>';
   });
@@ -755,10 +792,44 @@ async function handleGreigeSubmit(event) {
 
 async function handleDyeingSubmit(event) {
   event.preventDefault();
-  const payload = objectFromForm(event.currentTarget);
-  payload.pi_item_id = state.selectedItemId;
-  await submitAction('addDyeingLot', payload, function () {
-    event.currentTarget.reset();
+  const form = event.currentTarget;
+  const sharedPayload = objectFromForm(form);
+  
+  const lots = [];
+  let index = 0;
+  while (form.elements['pi_item_id_' + index]) {
+    const sentQty = form.elements['sent_weight_' + index].value;
+    const receivedQty = form.elements['received_weight_' + index].value;
+    const lotNo = form.elements['dyeing_lot_no_' + index].value.trim();
+    
+    if (lotNo || sentQty || receivedQty) {
+      lots.push({
+        pi_item_id: form.elements['pi_item_id_' + index].value,
+        dyeing_lot_no: lotNo,
+        greige_lot_no: form.elements['greige_lot_no_' + index].value,
+        sent_rolls: form.elements['sent_rolls_' + index].value,
+        sent_weight: sentQty,
+        received_rolls: form.elements['received_rolls_' + index].value,
+        received_weight: receivedQty,
+        loss_weight: form.elements['loss_weight_' + index].value,
+        dyeing_party: sharedPayload.dyeing_party,
+        sent_date: sharedPayload.sent_date,
+        process_type: sharedPayload.process_type,
+        received_date: sharedPayload.received_date,
+        addons: sharedPayload.addons,
+        remarks: sharedPayload.remarks
+      });
+    }
+    index++;
+  }
+
+  if (lots.length === 0) {
+    showToast('Please enter details for at least one item.');
+    return;
+  }
+
+  await submitAction('addDyeingLotsBatch', { lots: lots }, function () {
+    form.reset();
   });
 }
 
@@ -840,6 +911,14 @@ function renderMasters() {
 }
 
 function renderDatalists() {
+  const colours = {};
+  rows('PI_Items').forEach(function(item) {
+    if (item.colour) colours[item.colour] = true;
+  });
+  document.getElementById('colourList').innerHTML = Object.keys(colours).sort().map(function (colour) {
+    return '<option value="' + escapeAttr(colour) + '">';
+  }).join('');
+  
   document.getElementById('customersList').innerHTML = rows('Masters_Customers').map(function (customer) {
     return '<option value="' + escapeAttr(customer.customer_name) + '">';
   }).join('');

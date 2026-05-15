@@ -106,6 +106,7 @@ const PMS_SHEETS = [
     idColumn: 'dyeing_lot_id',
     headers: [
       'dyeing_lot_id',
+      'dyeing_lot_no',
       'source_key',
       'greige_lot_id',
       'greige_lot_no',
@@ -284,6 +285,18 @@ const PMS_SHEETS = [
     headers: [
       'addon_id',
       'addon_name',
+      'status',
+      'remarks',
+    ],
+  },
+  {
+    name: 'Masters_DyeingHouses',
+    idColumn: 'dyeing_house_id',
+    headers: [
+      'dyeing_house_id',
+      'dyeing_house_name',
+      'phone',
+      'address',
       'status',
       'remarks',
     ],
@@ -1210,6 +1223,8 @@ function doPost(e) {
         return jsonResponse_(addGreigeLot_(request.payload || {}));
       case 'addDyeingLot':
         return jsonResponse_(addDyeingLot_(request.payload || {}));
+      case 'addDyeingLotsBatch':
+        return jsonResponse_(addDyeingLotsBatch_(request.payload || {}));
       case 'upsertMaster':
         return jsonResponse_(upsertMaster_(request.payload || {}));
       case 'importSalesPis':
@@ -1494,6 +1509,7 @@ function addDyeingLot_(payload) {
 
   appendObject_(spreadsheet.getSheetByName('Dyeing_Lots'), {
     dyeing_lot_id: payload.dyeing_lot_id || makeId_('DYE'),
+    dyeing_lot_no: payload.dyeing_lot_no || makeLotNo_('DL'),
     source_key: payload.source_key || '',
     greige_lot_id: greigeLot ? greigeLot.greige_lot_id : (payload.greige_lot_id || ''),
     greige_lot_no: greigeLot ? greigeLot.greige_lot_no : greigeLotNo,
@@ -1520,6 +1536,76 @@ function addDyeingLot_(payload) {
     recalculateGreigeLot_(greigeLot.greige_lot_id);
   }
   recalculateItem_(piItemId);
+  return readAll_();
+}
+
+function addDyeingLotsBatch_(payload) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const dyeingLotsSheet = spreadsheet.getSheetByName('Dyeing_Lots');
+  const itemsToUpdate = [];
+  const greigeLotsToUpdate = [];
+
+  const lots = payload.lots || [];
+  
+  lots.forEach(function (lotPayload) {
+    const greigeLotNo = lotPayload.greige_lot_no || '';
+    const greigeLot = greigeLotNo ? getGreigeLotByNo_(greigeLotNo) : null;
+    const piItemId = lotPayload.pi_item_id || '';
+
+    if (!piItemId) {
+      throw new Error('PI item is required.');
+    }
+
+    const item = getPiItemById_(piItemId);
+    if (greigeLot && !isSameFabricGroup_(item, greigeLot)) {
+      throw new Error('Selected greige lot does not belong to the fabric group for item: ' + item.fabric_name);
+    }
+
+    const sentWeight = toNumber_(lotPayload.sent_weight || lotPayload.sent_qty);
+    const receivedWeight = toNumber_(lotPayload.received_weight || lotPayload.received_qty);
+    const sentRolls = toNumber_(lotPayload.sent_rolls);
+    const receivedRolls = toNumber_(lotPayload.received_rolls);
+    const lossWeight = lotPayload.loss_weight === '' || lotPayload.loss_weight === undefined
+      ? Math.max(sentWeight - receivedWeight, 0)
+      : toNumber_(lotPayload.loss_weight);
+
+    appendObject_(dyeingLotsSheet, {
+      dyeing_lot_id: lotPayload.dyeing_lot_id || makeId_('DYE'),
+      dyeing_lot_no: lotPayload.dyeing_lot_no || makeLotNo_('DL'),
+      source_key: lotPayload.source_key || '',
+      greige_lot_id: greigeLot ? greigeLot.greige_lot_id : (lotPayload.greige_lot_id || ''),
+      greige_lot_no: greigeLot ? greigeLot.greige_lot_no : greigeLotNo,
+      pi_item_id: piItemId,
+      pi_no: item.pi_no || '',
+      fabric_name: item.fabric_name || '',
+      dyeing_party: lotPayload.dyeing_party || '',
+      sent_date: lotPayload.sent_date || today_(),
+      sent_rolls: sentRolls,
+      sent_weight: sentWeight,
+      colour: lotPayload.colour || item.colour || '',
+      process_type: lotPayload.process_type || '',
+      addons: Array.isArray(lotPayload.addons) ? lotPayload.addons.join(', ') : (lotPayload.addons || ''),
+      received_date: lotPayload.received_date || '',
+      received_rolls: receivedRolls,
+      received_weight: receivedWeight,
+      loss_weight: lossWeight,
+      status: lotPayload.status || getDyeingStatus_(sentWeight, receivedWeight),
+      remarks: lotPayload.remarks || '',
+      created_at: new Date().toISOString(),
+    });
+
+    if (greigeLot) {
+      if (greigeLotsToUpdate.indexOf(greigeLot.greige_lot_id) === -1) {
+        greigeLotsToUpdate.push(greigeLot.greige_lot_id);
+      }
+    }
+    if (itemsToUpdate.indexOf(piItemId) === -1) {
+      itemsToUpdate.push(piItemId);
+    }
+  });
+
+  greigeLotsToUpdate.forEach(recalculateGreigeLot_);
+  itemsToUpdate.forEach(recalculateItem_);
   return readAll_();
 }
 
