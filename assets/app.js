@@ -83,6 +83,7 @@ const state = {
   selectedItemId: '',
   workflow: 'yarns',
   expandedGroups: {},
+  detailColourFilter: '',
   deferredInstall: null,
   lastError: '',
 };
@@ -169,6 +170,7 @@ function handleClick(event) {
   if (piRow) {
     state.selectedPiId = piRow.dataset.selectPi;
     state.selectedItemId = '';
+    state.detailColourFilter = '';
     setView('orders');
     renderOrders();
     return;
@@ -184,6 +186,13 @@ function handleClick(event) {
   var workflowButton = event.target.closest('[data-workflow]');
   if (workflowButton) {
     state.workflow = workflowButton.dataset.workflow;
+    renderPiDetail();
+    return;
+  }
+
+  var colourChip = event.target.closest('[data-detail-colour]');
+  if (colourChip) {
+    state.detailColourFilter = colourChip.dataset.detailColour;
     renderPiDetail();
   }
 }
@@ -278,7 +287,7 @@ function renderDashboard() {
   document.getElementById('metricGrid').innerHTML = [
     metricCardEx('Total PIs', pis.length, openPis + ' open', 'brand'),
     metricCardEx('Ordered', formatNumber(orderedQty), items.length + ' items', ''),
-    metricCardEx('Greige', formatNumber(producedQty), pctOf(producedQty, orderedQty) + '% produced', 'good'),
+    metricCardEx('Kora', formatNumber(producedQty), pctOf(producedQty, orderedQty) + '% received', 'good'),
     metricCardEx('In Dyeing', formatNumber(dyeingSentQty), formatNumber(Math.max(dyeingSentQty - receivedQty, 0)) + ' pending', 'warn'),
     metricCardEx('Received', formatNumber(receivedQty), pctOf(receivedQty, orderedQty) + '% done', 'good'),
     metricCardEx('Delayed', delayedItems.length, delayedItems.length > 0 ? 'Action needed' : 'On track', delayedItems.length > 0 ? 'bad' : 'good'),
@@ -341,7 +350,7 @@ function renderPriorityList(delayedItems) {
 function renderStatusStack() {
   const items = rows('PI_Items');
   const groups = groupCount(items, 'status');
-  const statuses = ['New', 'Planned', 'Greige Received', 'Greige Ready', 'In Dyeing', 'Part Received', 'Completed'];
+  const statuses = ['New', 'Planned', 'Kora Received', 'Kora Ready', 'In Dyeing', 'Part Received', 'Completed'];
   const max = Math.max.apply(null, statuses.map(function (status) {
     return groups[status] || 0;
   }).concat([1]));
@@ -361,7 +370,7 @@ function renderPipeline(items) {
   var stages = [
     { key: 'New', label: 'New', icon: '○' },
     { key: 'Planned', label: 'Planned', icon: '◐' },
-    { key: 'Greige Received', label: 'Greige', icon: '◧' },
+    { key: 'Kora Received', label: 'Kora', icon: '◧' },
     { key: 'In Dyeing', label: 'Dyeing', icon: '◑' },
     { key: 'Part Received', label: 'Part Rcvd', icon: '◕' },
     { key: 'Completed', label: 'Done', icon: '●' },
@@ -371,7 +380,7 @@ function renderPipeline(items) {
   document.getElementById('pipelinePanel').innerHTML =
     '<div class="panel-heading"><h2>Production Pipeline</h2><span class="muted">' + items.length + ' items</span></div>' +
     '<div class="pipeline">' + stages.map(function (stage, i) {
-      var count = (counts[stage.key] || 0) + (stage.key === 'Greige Received' ? (counts['Greige Ready'] || 0) : 0);
+      var count = (counts[stage.key] || 0) + (stage.key === 'Kora Received' ? (counts['Kora Ready'] || 0) : 0);
       var pct = Math.round((count / total) * 100);
       return '<div class="pipeline-stage">' +
         '<div class="pipeline-icon">' + stage.icon + '</div>' +
@@ -400,7 +409,7 @@ function renderPiProgressCards(pis) {
         '<div class="pi-prog-head"><strong>' + escapeHtml(pi.pi_no) + '</strong>' + statusChip(pi.status) + '</div>' +
         '<span class="muted">' + escapeHtml(pi.customer_name) + '</span>' +
         '<div class="pi-prog-bars">' +
-          '<div class="prog-row"><span>Greige</span><div class="prog-track"><div class="prog-fill greige" style="width:' + gPct + '%"></div></div><span>' + gPct + '%</span></div>' +
+          '<div class="prog-row"><span>Kora</span><div class="prog-track"><div class="prog-fill greige" style="width:' + gPct + '%"></div></div><span>' + gPct + '%</span></div>' +
           '<div class="prog-row"><span>Final</span><div class="prog-track"><div class="prog-fill final" style="width:' + pct + '%"></div></div><span>' + pct + '%</span></div>' +
         '</div>' +
         '<div class="pi-prog-foot">' +
@@ -469,24 +478,44 @@ function renderPiDetail() {
   }
 
   var items = getItems(pi.pi_id);
-  if (!state.selectedItemId && items[0]) {
-    state.selectedItemId = items[0].pi_item_id;
-  }
-  var selectedItem = items.find(function (item) {
-    return item.pi_item_id === state.selectedItemId;
-  }) || items[0];
+  var uniqueColours = [];
+  items.forEach(function(i) {
+    if (i.colour && uniqueColours.indexOf(i.colour) === -1) uniqueColours.push(i.colour);
+  });
+  uniqueColours.sort();
 
-  var groups = buildFabricGroups(items);
+  var filteredItems = items;
+  if (state.detailColourFilter) {
+    filteredItems = items.filter(function(i) { return i.colour === state.detailColourFilter; });
+  }
+
+  if (!state.selectedItemId && filteredItems[0]) {
+    state.selectedItemId = filteredItems[0].pi_item_id;
+  }
+  var selectedItem = filteredItems.find(function (item) {
+    return item.pi_item_id === state.selectedItemId;
+  }) || filteredItems[0];
+
+  var colourBar = '<div class="colour-bar">' +
+    '<button class="colour-chip' + (!state.detailColourFilter ? ' is-active' : '') + '" data-detail-colour="">All Colours</button>' +
+    uniqueColours.map(function(c) {
+      return '<button class="colour-chip' + (state.detailColourFilter === c ? ' is-active' : '') + '" data-detail-colour="' + escapeAttr(c) + '">' + escapeHtml(c) + '</button>';
+    }).join('') +
+  '</div>';
+
+  var groups = buildFabricGroups(filteredItems);
 
   panel.innerHTML = '<div class="panel-heading">' +
     '<div><h2>' + escapeHtml(pi.pi_no) + '</h2><span class="muted">' + escapeHtml(pi.customer_name) + '</span></div>' +
     statusChip(pi.status) +
   '</div>' +
+  colourBar +
   '<div class="pi-summary">' +
-    summaryTile('Items', items.length) +
+    summaryTile('Items', filteredItems.length + (state.detailColourFilter ? ' of ' + items.length : '')) +
     summaryTile('Fab Groups', groups.length) +
-    summaryTile('Ordered', formatNumber(sum(items, 'ordered_qty'))) +
-    summaryTile('Received', formatNumber(sum(items, 'dyeing_received_qty'))) +
+    summaryTile('Ordered', formatNumber(sum(filteredItems, 'ordered_qty'))) +
+    summaryTile('Kora', formatNumber(sum(filteredItems, 'greige_produced_qty'))) +
+    summaryTile('Received', formatNumber(sum(filteredItems, 'dyeing_received_qty'))) +
   '</div>' +
   renderGroupedItems(groups) +
   (selectedItem ? renderWorkflow(selectedItem) : '');
@@ -553,7 +582,7 @@ function renderItemCard(item) {
       statusChip(item.status) +
     '</div>' +
     '<div class="progress-grid">' +
-      progressTile('Greige', item.greige_produced_qty, item.ordered_qty) +
+      progressTile('Kora', item.greige_produced_qty, item.ordered_qty) +
       progressTile('Dyeing Sent', item.dyeing_sent_qty, item.ordered_qty) +
       progressTile('Received', item.dyeing_received_qty, item.ordered_qty) +
     '</div>' +
@@ -564,7 +593,7 @@ function renderWorkflow(item) {
   return '<div class="workflow-panel">' +
     '<div class="workflow-tabs">' +
       workflowButton('yarns', 'Yarns') +
-      workflowButton('greige', 'Greige Lots') +
+      workflowButton('greige', 'Kora Lots') +
       workflowButton('dyeing', 'Dyeing') +
     '</div>' +
     renderWorkflowBody(item) +
@@ -612,44 +641,38 @@ function renderGreigeForm(item) {
   const groupItems = getFabricGroupItems(item);
   const groupOrderedQty = sum(groupItems, 'ordered_qty');
   const lots = getGreigeLotsForGroup(item);
-  const groupGreigeQty = sum(lots, 'weight_qty');
+  const groupKoraQty = sum(lots, 'weight_qty');
+  const groupSentQty = sum(lots, 'dyeing_sent_weight');
+  const groupBalance = groupKoraQty - groupSentQty;
+  
   const machines = rows('Masters_Machines');
-  const workers = rows('Masters_JobWorkers');
   const machineOptions = machines.map(function (machine) {
     return '<option value="' + escapeAttr(machine.machine_no) + '">' + escapeHtml(machine.machine_name || ('Machine ' + machine.machine_no)) + '</option>';
   }).join('');
-  const workerOptions = workers.map(function (worker) {
-    return '<option value="' + escapeAttr(worker.job_worker_name) + '">';
-  }).join('');
 
   return '<div class="pi-summary">' +
-    summaryTile('Fabric Group', item.fabric_name) +
-    summaryTile('Colours', groupItems.length) +
-    summaryTile('Greige / Ordered', formatNumber(groupGreigeQty) + ' / ' + formatNumber(groupOrderedQty)) +
+    summaryTile('Kora Received', formatNumber(groupKoraQty)) +
+    summaryTile('Kora Dispatched', formatNumber(groupSentQty)) +
+    summaryTile('Balance Available', formatNumber(groupBalance)) +
   '</div>' +
   '<form id="greigeForm" class="stack-form">' +
-    '<h3>Receive greige for all ' + escapeHtml(item.fabric_name) + ' colours in this PI</h3>' +
+    '<h3>Add Kora Receipt for ' + escapeHtml(item.fabric_name) + '</h3>' +
     '<div class="form-grid">' +
-      '<label><span>Receipt / Inward No</span><input name="greige_lot_no" placeholder="Auto if blank"></label>' +
-      '<label><span>Received Date</span><input name="received_date" type="date" value="' + todayIso() + '"></label>' +
-      '<label><span>Source</span><select name="source_type"><option>In-house</option><option>Job worker</option></select></label>' +
+      '<label><span>Receipt No</span><input name="greige_lot_no" placeholder="Auto if blank"></label>' +
+      '<label><span>Date</span><input name="received_date" type="date" value="' + todayIso() + '"></label>' +
       '<label><span>Machine</span><select name="machine_no"><option value="">Select</option>' + machineOptions + '</select></label>' +
-      '<label><span>Job Worker</span><input name="job_worker_name" list="jobWorkersList" placeholder="Outside worker"></label>' +
       '<label><span>Rolls</span><input name="rolls" type="number" step="1" min="0"></label>' +
       '<label><span>Weight</span><input name="weight_qty" type="number" step="0.01" min="0"></label>' +
-      '<label><span>Unit</span><select name="unit"><option>Kg</option><option>Meter</option></select></label>' +
+      '<label><span>Source</span><select name="source_type"><option>In-house</option><option>Job worker</option></select></label>' +
     '</div>' +
-    '<datalist id="jobWorkersList">' + workerOptions + '</datalist>' +
-    '<label><span>Remarks</span><input name="remarks" placeholder="Shift, roll or fabric notes"></label>' +
-    '<button class="primary-button" type="submit">Add Greige Receipt</button>' +
+    '<button class="primary-button" type="submit">Add Kora Receipt</button>' +
   '</form>' +
-  renderMiniList('Greige Receipts', lots, function (lot) {
+  '<details style="margin-top:12px; font-size:13px;"><summary class="muted">View Individual Receipts</summary>' +
+  renderMiniList('Receipts', lots, function (lot) {
     const source = lot.source_type === 'Job worker' ? lot.job_worker_name : 'Machine ' + lot.machine_no;
-    const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
-    return '<strong>Receipt: ' + escapeHtml(lot.greige_lot_no || '-') + ' - ' + escapeHtml(source || '-') + '</strong><span>' +
-      formatNumber(lot.rolls) + ' rolls / ' + formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') +
-      ' - balance ' + formatNumber(balance) + '</span>';
-  });
+    return '<strong>' + escapeHtml(lot.greige_lot_no || '-') + '</strong><span>' +
+      formatNumber(lot.weight_qty) + ' ' + escapeHtml(lot.unit || 'Kg') + ' - bal ' + formatNumber(lot.balance_weight) + '</span>';
+  }) + '</details>';
 }
 
 function renderDyeingForm(item) {
@@ -668,23 +691,20 @@ function renderDyeingForm(item) {
   }).join(', ');
 
   const itemsHtml = colourGroupItems.map(function(cItem, index) {
-    const greigeLots = getGreigeLotsForGroup(cItem);
-    const greigeOptions = greigeLots.map(function (lot) {
-      const balance = lot.balance_weight === '' || lot.balance_weight === undefined ? lot.weight_qty : lot.balance_weight;
-      return '<option value="' + escapeAttr(lot.greige_lot_no) + '">Inward: ' + escapeHtml(lot.greige_lot_no) + ' - bal ' + formatNumber(balance) + '</option>';
-    }).join('');
+    const koraLots = getGreigeLotsForGroup(cItem);
+    const availableKora = sum(koraLots, 'balance_weight');
     
     return '<div class="item-dyeing-row" style="border-top:1px solid var(--border-color); padding-top:12px; margin-top:12px;">' +
       '<h4>' + escapeHtml(cItem.fabric_name) + ' <span class="muted">(' + formatNumber(cItem.ordered_qty) + ' ' + escapeHtml(cItem.unit || 'Kg') + ')</span></h4>' +
+      '<p class="muted" style="margin:0">Available Kora: ' + formatNumber(availableKora) + '</p>' +
       '<input type="hidden" name="pi_item_id_' + index + '" value="' + escapeAttr(cItem.pi_item_id) + '">' +
       '<div class="form-grid compact">' +
         '<label><span>Dyeing Lot No</span><input name="dyeing_lot_no_' + index + '" placeholder="e.g. 1234"></label>' +
-        '<label><span>Greige Inward</span><select name="greige_lot_no_' + index + '"><option value="">Select</option>' + greigeOptions + '</select></label>' +
         '<label><span>Sent Rolls</span><input name="sent_rolls_' + index + '" type="number" step="1" min="0"></label>' +
         '<label><span>Sent Weight</span><input name="sent_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
-        '<label><span>Received Rolls</span><input name="received_rolls_' + index + '" type="number" step="1" min="0"></label>' +
-        '<label><span>Received Weight</span><input name="received_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
-        '<label><span>Loss Weight</span><input name="loss_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
+        '<label><span>Recvd Rolls</span><input name="received_rolls_' + index + '" type="number" step="1" min="0"></label>' +
+        '<label><span>Recvd Weight</span><input name="received_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
+        '<label><span>Loss</span><input name="loss_weight_' + index + '" type="number" step="0.01" min="0"></label>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -696,22 +716,18 @@ function renderDyeingForm(item) {
 
   return '<form id="dyeingForm" class="stack-form">' +
     '<h3>Assign Dyeing Lot for ' + escapeHtml(item.colour) + '</h3>' +
-    '<p class="muted" style="margin:0">Applies to ' + colourGroupItems.length + ' item(s) sharing this colour.</p>' +
     '<div class="form-grid">' +
       '<label><span>Dyeing House</span><select name="dyeing_party"><option value="">Select</option>' + dyeingHouses + '</select></label>' +
       '<label><span>Sent Date</span><input name="sent_date" type="date" value="' + todayIso() + '"></label>' +
       '<label><span>Process</span><select name="process_type"><option value="">Select</option>' + processes + '</select></label>' +
-      '<label><span>Received Date</span><input name="received_date" type="date"></label>' +
-      '<label><span>Addons</span><input name="addons" placeholder="' + escapeAttr(addons || 'Silicon, Softener') + '"></label>' +
+      '<label><span>Addons</span><input name="addons" placeholder="' + escapeAttr(addons || 'Silicon') + '"></label>' +
     '</div>' +
-    '<label><span>Remarks</span><input name="remarks" placeholder="Dyeing or finish notes"></label>' +
     itemsHtml +
     '<button class="primary-button" style="margin-top:16px" type="submit">Assign Dyeing Lots</button>' +
   '</form>' +
   renderMiniList('Assigned Dyeing Lots', allLots, function (lot) {
-    return '<strong>Lot: ' + escapeHtml(lot.dyeing_lot_no || '-') + ' (' + escapeHtml(lot.dyeing_party || '-') + ') - ' + escapeHtml(lot.fabric_name) + '</strong><span>' +
-      formatNumber(lot.received_rolls) + ' rolls / ' + formatNumber(lot.received_weight) + ' received from Inward ' +
-      escapeHtml(lot.greige_lot_no) + '</span>';
+    return '<strong>Lot: ' + escapeHtml(lot.dyeing_lot_no || '-') + ' (' + escapeHtml(lot.dyeing_party || '-') + ')</strong><span>' +
+      formatNumber(lot.received_weight) + ' kg received</span>';
   });
 }
 
@@ -785,6 +801,7 @@ async function handleGreigeSubmit(event) {
   event.preventDefault();
   const payload = objectFromForm(event.currentTarget);
   payload.pi_item_id = state.selectedItemId;
+  payload.unit = 'Kg'; // Default for Kora
   await submitAction('addGreigeLot', payload, function () {
     event.currentTarget.reset();
   });
@@ -806,7 +823,6 @@ async function handleDyeingSubmit(event) {
       lots.push({
         pi_item_id: form.elements['pi_item_id_' + index].value,
         dyeing_lot_no: lotNo,
-        greige_lot_no: form.elements['greige_lot_no_' + index].value,
         sent_rolls: form.elements['sent_rolls_' + index].value,
         sent_weight: sentQty,
         received_rolls: form.elements['received_rolls_' + index].value,

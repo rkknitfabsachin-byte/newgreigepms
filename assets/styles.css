@@ -507,7 +507,7 @@ h3 {
 }
 
 .pi-summary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .metric-card,
@@ -925,6 +925,40 @@ tbody tr.is-selected {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: var(--shadow);
+}
+
+/* ── Colour Bar ── */
+.colour-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 4px 0;
+}
+
+.colour-chip {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.colour-chip:hover {
+  background: var(--surface-2);
+  border-color: var(--brand);
+}
+
+.colour-chip.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 @media (max-width: 1180px) {

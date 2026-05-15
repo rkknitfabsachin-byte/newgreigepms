@@ -1565,6 +1565,24 @@ function addDyeingLotsBatch_(payload) {
     const receivedWeight = toNumber_(lotPayload.received_weight || lotPayload.received_qty);
     const sentRolls = toNumber_(lotPayload.sent_rolls);
     const receivedRolls = toNumber_(lotPayload.received_rolls);
+    
+    // Automatic Lot Allocation
+    let remainingToAllocate = sentWeight;
+    let availableLots = getGreigeLotsForFabricGroup_(item).filter(function(l) { 
+      return toNumber_(l.balance_weight) > 0; 
+    });
+    // Sort by date (FIFO)
+    availableLots.sort(function(a, b) { return new Date(a.received_date) - new Date(b.received_date); });
+
+    if (remainingToAllocate > 0 && availableLots.length === 0) {
+      throw new Error('No Kora (Greige) available for ' + item.fabric_name);
+    }
+
+    // If no specific lot is provided, we still need to link to SOME lot in the record.
+    // For simplicity, we'll link to the oldest available lot and the backend recalculate will update all balances correctly.
+    // In a more robust system, we would split the Dyeing Lot record per Greige Lot, but user wants simplicity.
+    const autoGreigeLot = availableLots[0];
+
     const lossWeight = lotPayload.loss_weight === '' || lotPayload.loss_weight === undefined
       ? Math.max(sentWeight - receivedWeight, 0)
       : toNumber_(lotPayload.loss_weight);
@@ -1573,8 +1591,8 @@ function addDyeingLotsBatch_(payload) {
       dyeing_lot_id: lotPayload.dyeing_lot_id || makeId_('DYE'),
       dyeing_lot_no: lotPayload.dyeing_lot_no || makeLotNo_('DL'),
       source_key: lotPayload.source_key || '',
-      greige_lot_id: greigeLot ? greigeLot.greige_lot_id : (lotPayload.greige_lot_id || ''),
-      greige_lot_no: greigeLot ? greigeLot.greige_lot_no : greigeLotNo,
+      greige_lot_id: autoGreigeLot ? autoGreigeLot.greige_lot_id : (lotPayload.greige_lot_id || ''),
+      greige_lot_no: autoGreigeLot ? autoGreigeLot.greige_lot_no : (lotPayload.greige_lot_no || ''),
       pi_item_id: piItemId,
       pi_no: item.pi_no || '',
       fabric_name: item.fabric_name || '',
@@ -1594,11 +1612,13 @@ function addDyeingLotsBatch_(payload) {
       created_at: new Date().toISOString(),
     });
 
-    if (greigeLot) {
-      if (greigeLotsToUpdate.indexOf(greigeLot.greige_lot_id) === -1) {
-        greigeLotsToUpdate.push(greigeLot.greige_lot_id);
+    // Mark all lots in this group for recalculation
+    availableLots.forEach(function(l) {
+      if (greigeLotsToUpdate.indexOf(l.greige_lot_id) === -1) {
+        greigeLotsToUpdate.push(l.greige_lot_id);
       }
-    }
+    });
+
     if (itemsToUpdate.indexOf(piItemId) === -1) {
       itemsToUpdate.push(piItemId);
     }
@@ -1648,19 +1668,6 @@ function recalculateGreigeLot_(greigeLotId) {
   const greigeSheet = spreadsheet.getSheetByName('Greige_Lots');
   const rowNumber = findRowByValue_(greigeSheet, 'greige_lot_id', greigeLotId);
 
-  if (!rowNumber) {
-    return;
-  }
-
-  const greigeLot = getObjectFromRow_(greigeSheet, rowNumber);
-  const dyeingLots = getSheetObjects_(spreadsheet.getSheetByName('Dyeing_Lots'))
-    .filter(function (lot) {
-      return String(lot.greige_lot_id) === String(greigeLotId) ||
-        (greigeLot.greige_lot_no && normalizeKey_(lot.greige_lot_no) === normalizeKey_(greigeLot.greige_lot_no));
-    });
-  const sentRolls = dyeingLots.reduce(function (total, lot) {
-    return total + toNumber_(lot.sent_rolls);
-  }, 0);
   const sentWeight = dyeingLots.reduce(function (total, lot) {
     return total + toNumber_(lot.sent_weight || lot.sent_qty);
   }, 0);
