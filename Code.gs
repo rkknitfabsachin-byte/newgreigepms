@@ -2090,6 +2090,12 @@ function today_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
+function getGreigeLotsForFabricGroup_(item) {
+  return getSheetObjects_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Greige_Lots')).filter(function(l) {
+    return isSameFabricGroup_(l, item);
+  });
+}
+
 function toNumber_(value) {
   const number = Number(value);
   return isNaN(number) ? 0 : number;
@@ -2101,6 +2107,27 @@ function normalizeCellValue_(value) {
   }
 
   return value;
+}
+
+function sum_(records, key) {
+  return records.reduce(function (total, record) {
+    return total + toNumber_(record[key]);
+  }, 0);
+}
+
+function updateRowByValue_(sheet, idColumn, idValue, updates) {
+  const rowNumber = findRowByValue_(sheet, idColumn, idValue);
+  if (rowNumber) {
+    updateObjectAtRow_(sheet, rowNumber, updates);
+  }
+}
+
+function isSameFabricGroup_(record, group) {
+  // Global pooling: only match fabric, gsm, and width. Ignore PI details.
+  if (normalizeKey_(record.fabric_name) !== normalizeKey_(group.fabric_name)) return false;
+  if (group.gsm && record.gsm && normalizeKey_(record.gsm) !== normalizeKey_(group.gsm)) return false;
+  if (group.width && record.width && normalizeKey_(record.width) !== normalizeKey_(group.width)) return false;
+  return true;
 }
 
 function jsonResponse_(payload) {

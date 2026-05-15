@@ -1097,13 +1097,8 @@ function normalizeKey(value) {
 }
 
 function isSameFabricGroup(record, group) {
-  if (group.pi_id && record.pi_id && String(record.pi_id) !== String(group.pi_id)) {
-    return false;
-  }
+  // Global pooling: match by fabric properties only.
 
-  if ((!group.pi_id || !record.pi_id) && normalizeKey(record.pi_no) !== normalizeKey(group.pi_no)) {
-    return false;
-  }
 
   if (normalizeKey(record.fabric_name) !== normalizeKey(group.fabric_name)) {
     return false;
