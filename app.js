@@ -275,9 +275,10 @@ function renderAll() {
 function renderDashboard() {
   var pis = rows('PIs');
   var items = rows('PI_Items');
+  var greigeLots = rows('Greige_Lots');
   var openPis = pis.filter(function (pi) { return pi.status !== 'Completed'; }).length;
   var orderedQty = sum(items, 'ordered_qty');
-  var producedQty = sum(items, 'greige_produced_qty');
+  var producedQty = sum(greigeLots, 'weight_qty');
   var dyeingSentQty = sum(items, 'dyeing_sent_qty');
   var receivedQty = sum(items, 'dyeing_received_qty');
   var delayedItems = getDelayedItems();
@@ -401,7 +402,7 @@ function renderPiProgressCards(pis) {
       var piItems = getItems(pi.pi_id);
       var ordered = sum(piItems, 'ordered_qty');
       var received = sum(piItems, 'dyeing_received_qty');
-      var greige = sum(piItems, 'greige_produced_qty');
+      var greige = sum(rows('Greige_Lots').filter(function (l) { return l.pi_id === pi.pi_id || String(l.pi_no).trim().toUpperCase() === String(pi.pi_no).trim().toUpperCase(); }), 'weight_qty');
       var pct = ordered > 0 ? Math.round((received / ordered) * 100) : 0;
       var gPct = ordered > 0 ? Math.round((greige / ordered) * 100) : 0;
       var isDelayed = pi.delivery_date && pi.delivery_date < todayIso();
@@ -514,7 +515,7 @@ function renderPiDetail() {
     summaryTile('Items', filteredItems.length + (state.detailColourFilter ? ' of ' + items.length : '')) +
     summaryTile('Fab Groups', groups.length) +
     summaryTile('Ordered', formatNumber(sum(filteredItems, 'ordered_qty'))) +
-    summaryTile('Kora', formatNumber(sum(filteredItems, 'greige_produced_qty'))) +
+    summaryTile('Kora', formatNumber(sum(rows('Greige_Lots').filter(function(l) { return l.pi_id === pi.pi_id || String(l.pi_no).trim().toUpperCase() === String(pi.pi_no).trim().toUpperCase(); }), 'weight_qty'))) +
     summaryTile('Received', formatNumber(sum(filteredItems, 'dyeing_received_qty'))) +
   '</div>' +
   renderGroupedItems(groups) +
